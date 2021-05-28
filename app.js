@@ -50,16 +50,16 @@ const GROUP_NAME_TAKEN = 212;
 
 var app = express();
 var http = require('http').Server(app);
-var io = require('socket.io')(http);
+var io = require('socket.io')(http, { path: '/rrchat/socket.io' });
 var port = process.env.PORT || 3789;
 
 
 // route to /views/index.html - defined route handler '/' that gets called when we hit our website home page
-app.get('/', function(req, res) {
+app.get('/rrchat', function(req, res) {
 	res.sendFile(__dirname + '/views/index.html')
 })
 
-app.use(express.static('./public'));
+app.use('/rrchat/public', express.static('./public'));
 
 let connection = mysql.createConnection({
   host: 'localhost',
@@ -775,13 +775,8 @@ io.on('connection', function(socket){
         break;
     }
   });
-
 });
 
-
-
-// this allows access to the static files like the style.css
-//app.use(express.static('public'));
 
 
 

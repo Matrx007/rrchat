@@ -96,7 +96,7 @@ function pushNotification(message, type) {
 }
 
 
-var socket = io();
+var socket = io.connect('https://rainisr.ee', { path: '/rrchat/socket.io' });
 
 // Groups
 let nickname = "Not logged in";

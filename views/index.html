@@ -2,14 +2,14 @@
 <html>
   <head>
     <title>Chatter</title>
-    <link rel="stylesheet" href="/login.css">
-    <link rel="stylesheet" href="/chat.css">
-    <link rel="stylesheet" href="/groups.css">
-    <link rel="stylesheet" href="/discover.css">
-    <link rel="stylesheet" href="/notifications.css">
-    <link rel="stylesheet" href="/themes.css">
-    <link rel="stylesheet" href="/util.css">
-    <link rel="stylesheet" href="/create-group.css">
+    <link rel="stylesheet" href="/rrchat/public/login.css">
+    <link rel="stylesheet" href="/rrchat/public/chat.css">
+    <link rel="stylesheet" href="/rrchat/public/groups.css">
+    <link rel="stylesheet" href="/rrchat/public/discover.css">
+    <link rel="stylesheet" href="/rrchat/public/notifications.css">
+    <link rel="stylesheet" href="/rrchat/public/themes.css">
+    <link rel="stylesheet" href="/rrchat/public/util.css">
+    <link rel="stylesheet" href="/rrchat/public/create-group.css">
   </head>
   <body style="width: 100%; height: 100%;">
 
@@ -41,7 +41,7 @@
     <div id="login">
       <div class="outer">
         <h1 class="label">rrchat</h1>
-        <img class="background" src="/background.jpg">
+        <img class="background" src="/rrchat/public/background.jpg">
         <div id="login-panel" class="middle-panel">
           <h1 class="title">Login</h1>
           <form class="input" onsubmit="logIn();return false">
@@ -59,7 +59,7 @@
     <div id="register" style="display: none;">
       <div class="outer">
         <h1 class="label">rrchat</h1>
-        <img class="background" src="/background.jpg">
+        <img class="background" src="/rrchat/public/background.jpg">
         <div id="register-panel" class="middle-panel">
           <h1 class="title">Register</h1>
           <form class="input" onsubmit="register();return false">
@@ -162,10 +162,10 @@
     <div id="notifications">
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
+    <script src="/rrchat/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.2/rollups/aes.js"></script>
     <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
-    <script src="/communication.js"></script>
+    <script src="/rrchat/public/communication.js"></script>
 
   </body>
 </html>
