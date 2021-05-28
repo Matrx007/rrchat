@@ -1,0 +1,35 @@
+#notifications {
+    position: fixed;
+
+    top: 16px;
+    right: 16px;
+
+    width: 128px;
+    height: calc(100vh - 2 * 16px);
+
+    display: flex;
+    flex-direction: column;
+    justify-content: left;
+    align-items: flex-end;
+    gap: 8px;
+
+    overflow-y: hidden;
+
+    pointer-events: none;
+}
+
+#notifications .message {
+    width: fit-content;
+    height: calc(32px - 2 * 8px);
+
+    padding: 8px;
+
+    border-right: solid 8px #59b8c9;
+
+    background-color: #fff;
+    box-shadow: 0 0 8px #0004;
+}
+
+#notifications .message {
+    color: #222;
+}

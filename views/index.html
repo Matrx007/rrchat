@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Chatter</title>
+    <link rel="stylesheet" href="/login.css">
+    <link rel="stylesheet" href="/chat.css">
+    <link rel="stylesheet" href="/groups.css">
+    <link rel="stylesheet" href="/discover.css">
+    <link rel="stylesheet" href="/notifications.css">
+    <link rel="stylesheet" href="/themes.css">
+    <link rel="stylesheet" href="/util.css">
+    <link rel="stylesheet" href="/create-group.css">
+  </head>
+  <body style="width: 100%; height: 100%;">
+
+
+    <div id="chat" style="display: none;">
+      <div id="info">
+        <div class="button" onclick="leaveChat()">
+          <svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M60 20L30 50L60 80" stroke="black" stroke-width="8" stroke-linecap="round"/>
+          </svg>
+        </div>
+
+        <h1 style="width: 40px; margin: 0; text-align: center; font-weight: 700;">#</h1>
+        <h1 id="group">No group selected</h1>
+        
+        <div style="margin: 0 auto;"></div>
+      </div>
+      
+      <ul id="messages"></ul>
+
+      <form id="msg" action="" @submit.prevent="submit" onSubmit="submitMessage();return false" >
+        <input id="m" placeholder="Write something" autocomplete="off" />
+        <button>
+          Send
+        </button>
+      </form>
+    </div>
+    
+    <div id="login">
+      <div class="outer">
+        <h1 class="label">rrchat</h1>
+        <img class="background" src="/background.jpg">
+        <div id="login-panel" class="middle-panel">
+          <h1 class="title">Login</h1>
+          <form class="input" onsubmit="logIn();return false">
+            <p>Username</p>
+            <input id="login-username" type="text">
+            <p>Password</p>
+            <input id="login-password" type="password">
+            <input id="login-button" type="submit" value="Log In">
+          </form>
+          <p class="warp" onclick="goToRegister()">Create an account</p>
+        </div>
+      </div>
+    </div>
+    
+    <div id="register" style="display: none;">
+      <div class="outer">
+        <h1 class="label">rrchat</h1>
+        <img class="background" src="/background.jpg">
+        <div id="register-panel" class="middle-panel">
+          <h1 class="title">Register</h1>
+          <form class="input" onsubmit="register();return false">
+            <p>Username</p>
+            <input id="register-username" type="text">
+            <p>Password</p>
+            <input id="register-password" type="password">
+            <p>Repeat password</p>
+            <input id="register-password-again" type="password">
+            <input id="register-button" type="submit" value="Register">
+          </form>
+          <p class="warp" onclick="goToLogin()">I have an account</p>
+        </div>
+      </div>
+    </div>
+    
+    <div id="groups" style="display: none;">
+      <div id="group-panel">
+        <div id="control-panel">
+          <div class="top-bar">
+            <p id="nickname" class="nickname">Not logged in</p>
+            <div style="margin: 0 auto;"></div>
+            <div class="button" onclick="logOut()">
+              <p>Log Out</p>
+            </div>
+          </div>
+
+          <div class="options">
+            <div class="option" onclick="openDiscover()">
+              <p>Discover groups</p>
+            </div>
+            <div class="option" onclick="openDiscover()">
+              <p>Create group</p>
+            </div>
+            <div class="option" onclick="openDiscover()">
+              <p>Change theme</p>
+            </div>
+            <div class="option" onclick="openDiscover()">
+              <p>Profile settings</p>
+            </div>
+          </div>
+        </div>
+        
+        <li id="group-list" class="group-list">
+          <div class="invitations">
+          </div>
+          <div class="groups">
+          </div>
+        </li>
+      </div>
+    </div>
+
+    <div id="discover" style="display: none;">
+      <div class="box">
+        <div class="back" onclick="closeDiscover()">
+          <svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M60 20L30 50L60 80" stroke="black" stroke-width="8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h1 class="title">Discover groups</h1>
+        <hr>
+        <form class="search" onsubmit="discoverSearch(); return false;">
+          <input type="text" placeholder="Search for a group">
+          <input type="submit" value="Search">
+        </form>
+        <li id="discover-list" class="hide-scrollbar">
+        </li>
+      </div>
+    </div>
+
+    <div id="create-group" style="display: none;">
+      <div class="box">
+        <div class="back" onclick="closeCreateGroup()">
+          <svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M60 20L30 50L60 80" stroke="black" stroke-width="8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h1 class="title">Creating a group</h1>
+        <hr>
+        <input id="create-group-name" type="text" placeholder="Group name">
+        <div class="option">
+          <input id="create-group-is-public" type="checkbox">
+          <label for="create-group-is-public">Make public</label>
+        </div>
+        <div class="option">
+          <input id="create-group-request-to-join" type="checkbox" disabled>
+          <label for="create-group-request-to-join">Request to join</label>
+        </div>
+        <div class="option">
+          <input id="create-group-others-can-invite" type="checkbox">
+          <label for="create-group-others-can-invite">Others can invite</label>
+        </div>
+
+        <div class="done" onclick="createGroup()">
+          <p>Done</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="notifications">
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.2/rollups/aes.js"></script>
+    <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+    <script src="/communication.js"></script>
+
+  </body>
+</html>

@@ -1,0 +1,155 @@
+#login, #register {
+    font: 13px Helvetica, Arial;
+    margin: 0;
+
+    height: 100vh;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.outer {
+    position: relative;
+
+    margin: auto;
+
+    width: min(100vw, 512px);
+    height: min(100vh, 320px);
+
+    display: flex;
+    flex-direction: row;
+
+    background-color: #fff;
+    box-shadow: 0 0 16px #0003;
+}
+
+.outer .label {
+    position: absolute;
+
+    bottom: 8px;
+    left: 8px;
+
+    color: #fff;
+    letter-spacing: 2px;
+}
+
+.outer .background {
+    width: 50%;
+    height: 100%;
+
+    object-fit: cover;
+}
+
+.middle-panel {
+    position: relative;
+
+    margin: 0;
+
+    width: 50%;
+    height: 100%;
+}
+
+.middle-panel .title {
+    position: absolute;
+
+    margin: 0;
+    
+    top: 8px;
+
+    width: 100%;
+    height: 30px;
+    
+    text-align: center;
+}
+
+.middle-panel .warp {
+    position: absolute;
+
+    margin: 0;
+    
+    bottom: 8px;
+
+    width: 100%;
+    height: 20px;
+
+    line-height: 20px;
+    color: #444;
+    
+    text-align: center;
+}
+
+.middle-panel .warp:hover {
+    cursor: pointer;
+    color: #777;
+}
+
+.middle-panel .input {
+    position: absolute;
+
+    width: 50%;
+    height: calc(100% - 20px);
+
+    top: calc(20px);
+    left: 0;
+
+    padding: 0 25%;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.middle-panel .input input[type=text],
+.middle-panel .input input[type=password] {
+    margin-bottom: 16px;
+    padding: 0 8px;
+
+    height: 28px;
+
+    border: none;
+    background: #fefefe;
+    border-radius: 4px;
+    box-shadow: inset 0 1px 1px 1px #0001;
+    border: solid 1px #f4f4f4;
+}
+.middle-panel .input input[type=text]:focus,
+.middle-panel .input input[type=password]:focus {
+    outline: none;
+    background: #fafafa;
+}
+
+.middle-panel .input p {
+    margin: 0 0 4px 0;
+
+    color: #888;
+
+    letter-spacing: 2px;
+    font-size: 0.9em;
+}
+
+.middle-panel .input input[type=submit] {
+    
+    height: 28px;
+
+    border: none;
+    outline: none;
+
+    color: #fff;
+    background-color: #59b8c9;
+    border-radius: 4px;
+    letter-spacing: 1.5px;
+
+    box-shadow: 0 2px 4px #0004;
+}
+
+.middle-panel .input input[type=submit]:hover {
+    cursor: pointer;
+
+    box-shadow: inset 0 4px 4px #0002;
+}
+
+.middle-panel .input input[type=submit]:disabled {
+    background-color: #ddd;
+    box-shadow: inset 0 4px 4px #0002;
+}
