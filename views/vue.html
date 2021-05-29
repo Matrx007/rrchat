@@ -6,11 +6,206 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>rrchat</title>
 
-    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.12/dist/vue.js"></script>
+    <script src="https://unpkg.com/vue@next"></script>
 </head>
-<body style="margin: 0; padding: 0;" id="app">
+<body style="margin: 0; padding: 0;">
     
+    <div id="app">
+
+
+
+        <div    id="login" 
+                class="outer"
+                v-show="!loggedIn"
+                style="display: none;">
+            <div    class="window flex-row"
+                    style="width: min(512px, 100%); height: min(320px, 100%);">
+
+
+                <!-- Two panes -->
+                <img    src="/rrchat/public/background.jpg"
+                        style="width: 50%; height: 100%; object-fit: cover;">
+                <div class="flex-column flex-middle fill">
+                    <h1     class="text-title push-bottom"
+                            style="margin-top: 8px;">Log in</h1>
+                    <form   class="input flex-column" 
+                            style="gap: 8px;"
+                            v-on:submit.prevent="logIn"
+                            style="width: 50%; height: 100%;">
+                        
+                        <p class="text-no-margin">Username</p>
+                        <input v-model="loginUsername" type="text">
+                        <p class="text-no-margin">Password</p>
+                        <input v-model="loginPassword" type="password">
+                        <input type="submit" value="Log In">
+                    </form>
+                    <a      class="text-no-margin push-top"
+                            style="margin-bottom: 8px;">Create an account</a>
+                </div>
+
+
+
+            </div>
+        </div>
+
+
+        <div    id="feed"
+                class="outer"
+                v-show="loggedIn"
+                style="display: none;">
+            <div    class="flex-row"
+                    style="width: min(640px, 100%); height: max-content; max-height: calc(100% - 2 * 32px);">
+                
+                <!-- Actions pane -->
+                <div    id="action-pane"
+                        class="flex-column window"
+                        style="width: 50%;">
+                    <div style="padding: 16px; height: 100%; overflow-y: auto;">
+                        <div    class="flex-row flex-middle"
+                                style="margin-bottom: 16px;">
+                            <p     class="text-no-margin"
+                                    style="font-size: 18px;">{{ loginUsername }}</p>
     
+                            <button class="button-style-light button-size-compact push-left" v-on:click="logOut">
+                                Log Out
+                            </button>
+                        </div>
+    
+                        <div class="flex-column">
+                            <div v-on:click="showDiscoverGroups = true">
+                                <p class="text-no-margin text-hover-highlight text-hover-pointer"
+                                    style="padding-left: 8px;">
+                                    Discover groups
+                                </p>
+                            </div>
+        
+                            <hr>
+        
+                            <div>
+                                <p class="text-no-margin text-hover-highlight text-hover-pointer"
+                                style="padding-left: 8px;">
+                                    Join a group
+                                </p>
+                            </div>
+        
+                            <hr>
+        
+                            <div>
+                                <p class="text-no-margin text-hover-highlight text-hover-pointer"
+                                style="padding-left: 8px;">
+                                    Create a group
+                                </p>
+                            </div>
+        
+                            <hr>
+        
+                            <div>
+                                <p class="text-no-margin text-hover-highlight text-hover-pointer"
+                                style="padding-left: 8px;">
+                                    Change theme
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Chats pane -->
+                <div    class="flex-column"
+                        style="width: 50%; height: 100%; gap: 8px; padding: 0 16px; overflow-y: auto;">
+                    
+                    
+                    
+                    
+                    
+                    <!-- Invitations -->
+                    <h1     class="text-no-margin" v-if="invitations.length > 0"
+                            style="margin: 0;">Invitations</h1>
+                    <div    class="flex-column group-card"
+                            v-for="invitation in invitations">
+                        <div>
+                            <h1 class="text-no-margin">{{ invitation[0] }}</h1>
+                            <p class="text-no-margin">Invited by {{ invitation[1] }}</p>
+                        </div>
+                    </div>
+
+                    
+                    <!-- Groups -->
+                    <h1     class="text-no-margin" style="margin: 0;">Groups</h1>
+
+                    <div    class="flex-column group-card"
+                            v-for="group in groups">
+                        <div>
+                            <h1 class="text-no-margin">{{ group[0] }}</h1>
+                            <p class="text-no-margin">{{ group[1] }}</p>
+                        </div>
+                    </div>
+
+                    <div    class="flex-column flex" 
+                            v-if="invitations.length == 0 && groups.length == 0"
+                            style="margin-top: 32px;">
+                        <h3 class="text-no-margin text-center">You don't belong into any group</h3>
+                        <p class="text-no-margin text-center">
+                            Use the 'Discover groups' section to find groups that you are interested in
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div    id="discover-groups" 
+                class="outer black-bg"
+                v-show="showDiscoverGroups"
+                style="display: none;">
+            <div    class="window flex-column"
+                    style="width: min(512px, 100%); height: 480px; padding: 0 16px;">
+
+
+                <!-- Title bar -->
+                <h1     class="text-title"
+                        style="font-size: 24px; margin: 4px 0; flex: 0 0 auto;">Discover groups</h1>
+                <hr>
+
+                <!-- Search bar -->
+                <form   class="search" 
+                        v-on:submit.prevent="return false;"
+                        style="flex: 0 0 auto; height: 32px; margin: 16px 0;">
+                    <input type="text" placeholder="Search by name">
+                    <input type="submit" value="Search">
+                </form>
+
+                <!-- Results list -->
+                <div    style="overflow: auto; flex: 1 1 auto; margin-bottom: 16px;">
+                    
+                    <div class="flex-column">
+                        <!-- Found group -->
+                        <div    class="flex-row flex-middle" 
+                                v-for="group in discoverGroupsResults">
+                            <div class="flex-column">
+                                <h1 class="text-no-margin"
+                                    style="font-size: 24px;">
+                                    {{ group[0] }}
+                                </h1>
+                                <p  class="text-no-margin">Members: {{ group[1] }}</p>
+                            </div>
+                            
+                            <!-- Spacer -->
+                            <div style="margin-right: auto;"></div>
+
+                            <button class="button-style-one-way button-size-tall">Join</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+
+
+    </div>
+
+    <link rel="stylesheet" href="/rrchat/public/dev.css">
+    <script src="/rrchat/socket.io/socket.io.js"></script>
+    <script src="/rrchat/public/dev.js"></script>
 
 </body>
 </html>

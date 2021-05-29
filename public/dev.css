@@ -1,0 +1,304 @@
+body {
+    margin: 0;
+    padding: 0;
+}
+
+hr {
+    width: 100%;
+    margin: 0;
+
+    border: none;
+    border-bottom: 1px solid #0002;
+}
+
+:root {
+    --accent-color: #59b8c9;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+*::-webkit-scrollbar {
+    width: 16px;
+}
+*::-webkit-scrollbar-thumb {
+    background: #0001;
+}
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/*
+    ### Utilities ###
+*/
+
+.flex-row {
+    display: flex;
+    flex-direction: row;
+}
+
+.flex-column {
+    display: flex;
+    flex-direction: column;
+}
+
+.flex-row-reverse {
+    display: flex;
+    flex-direction: row-reverse;
+}
+
+.flex-column-reverse {
+    display: flex;
+    flex-direction: column-reverse;
+}
+
+.flex-middle {
+    justify-content: center;
+    align-items: center;
+}
+
+.text-no-margin {
+    margin: 0;
+}
+
+.text-title {
+    width: 100%;
+    text-align: center;
+    margin: 0;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.push-top {
+    margin-top: auto;
+}
+
+.push-bottom {
+    margin-bottom: auto;
+}
+
+.push-left {
+    margin-left: auto;
+}
+
+.push-right {
+    margin-right: auto;
+}
+
+.fill {
+    width: 100%;
+    height: 100%;
+}
+
+.vert-sep {
+    margin: 8px 0;
+    height: calc(100% - 2 * 8px);
+    border-left: 1px solid #0002;
+}
+
+.text-hover-highlight:hover {
+    color: var(--accent-color);
+}
+
+.text-hover-pointer:hover {
+    cursor: pointer;
+}
+
+/*
+    ### Component styles ###
+*/
+
+.button-style-light {
+    background-color: transparent;
+
+    border-radius: 4px;
+    border: 1px solid #0002;
+    
+    color: #444;
+    font-size: 0.8em;
+    letter-spacing: 1px;
+}
+
+.button-style-light:hover {
+    box-shadow: inset 0 3px 6px #0002;
+    cursor: pointer;
+}
+
+.button-size-compact {
+    width: fit-content;
+    height: fit-content;
+
+    padding: 4px 8px;
+}
+
+.button-style-one-way {
+    width: 64px;
+    height: calc(100% - 8px * 2);
+    margin: 8px 0 8px 8px;
+
+    background-color: transparent;
+
+    border-radius: 3px;
+    border: 1px solid #0002;
+    
+    color: #888;
+    font-size: 0.8em;
+    letter-spacing: 1px;
+}
+
+.button-style-one-way:hover {
+    cursor: pointer;
+
+    color: #fff;
+    background-color: var(--accent-color);
+}
+
+.button-size-tall {
+    height: 100%;
+    
+    padding: 8px;
+}
+
+/*
+    ### Page structure ###
+*/
+
+.outer {
+    position: fixed;
+    
+    width: 100vw;
+    height: 100vh;
+
+    overflow: hidden;
+
+    display: flex;
+    flex-direction: column;
+
+    justify-content: center;
+    align-items: center;
+}
+
+.black-bg {
+    background-color: #0008;
+}
+
+.outer .window {
+    background-color: #fff;
+    border-radius: 4px;
+    box-shadow: 0 0 24px #4442;
+}
+
+/*
+    ### Specific desing components ###
+*/
+
+.group-card {
+    width: 100%;
+    height: 50px;
+    
+    border-radius: 4px;
+    border: solid 1px #0002;
+    box-shadow: 0 0 8px #0001;
+    background-color: #fff;
+
+    transition: border 0.1s ease, width 0.1s ease, box-shadow 0.1s ease;
+}
+
+.group-card div {
+    padding: 8px;
+    
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.group-card h1 {
+    font-weight: 500;
+    font-size: 1.2em;
+
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.group-card p {
+    width: 100%;
+
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    
+    color: #888;
+    font-size: 0.8em;
+}
+
+.group-card:hover {
+    box-shadow: 0 0 8px #0003;
+    border-left: solid 4px var(--accent-color);
+
+    cursor: pointer;
+}
+
+.search {
+    width: 100%;
+    height: 32px;
+
+    background-color: transparent;
+
+    border-radius: 4px;
+    border: 1px solid #0002;
+}
+
+.search input[type=text] {
+    width: calc(100% - 80px);
+    height: 100%;
+
+    padding-left: 8px;
+
+    border: none;
+
+    color: #0008;
+
+    background-color: transparent;
+}
+
+.search input[type=submit] {
+    width: 80px;
+    height: 100%;
+
+    border: none;
+    border-left: 1px solid #0002;
+
+    color: #000b;
+
+    background-color: transparent;
+}
+
+.search input[type=submit]:hover {
+    border: none;
+
+    color: #fff;
+
+    background-color: var(--accent-color);
+
+    cursor: pointer;
+}
+
+/*
+    ### Dynamic layout ###
+*/
+
+@media only screen and (max-width: 512px) {
+    #feed > div {
+        width: calc(100% - 32px) !important;
+        gap: 16px;
+        flex-direction: column;
+    }
+    #feed > div > div {
+        padding: 0 16px 16px 16px !important; 
+        width: 100% !important;
+    }
+}

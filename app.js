@@ -59,6 +59,10 @@ app.get('/rrchat', function(req, res) {
 	res.sendFile(__dirname + '/views/index.html')
 })
 
+app.get('/rrchat/dev', function(req, res) {
+	res.sendFile(__dirname + '/views/vue.html')
+})
+
 app.use('/rrchat/public', express.static('./public'));
 
 let connection = mysql.createConnection({
