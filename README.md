@@ -1,6 +1,6 @@
 # rrchat
 Web-based instant messenger  
-Try it [here](http://95.179.241.52)
+Try it [here](https://rainisr.ee/rrchat)
 
 ## Tech stack
 [Node.js](https://nodejs.org/)  
