@@ -67,7 +67,7 @@ const app = Vue.createApp({
             loginPassword: '',
 
             // GUI
-            showDiscoverGroups: true
+            showDiscoverGroups: false
         }
     },
     methods: {
@@ -79,12 +79,24 @@ const app = Vue.createApp({
             this.loginUsername = '';
             this.loginPassword = '';
             this.waitingToBeLoggedIn = true;
-        }
+
+            // simulating server response
+            let vue = this;
+            setTimeout(function() {
+                vue.response_loggedIn({nickname: "John Doe"});
+            }, 1000);
+        },
 
         gui_logOut() {
             this.request_logOut();
             this.waitingToBeLoggedOut = true;
-        }
+
+            // simulating server response
+            let vue = this;
+            setTimeout(function() {
+                vue.response_loggedOut();
+            }, 1000);
+        },
 
         // ### CLIENT ACTIONS ###
 
@@ -124,14 +136,14 @@ const app = Vue.createApp({
             this.loginPassword = '';
             this.groups = [];
             this.invitations = [];
-            this.logOut();
+            this.loggedIn = false;
             this.waitingToBeLoggedOut = false;
         },
 
         response_groupsFeed(data) {
             if(data["append"] == true) {
                 this.groups = this.groups.concat(data["groups"]);
-            if(data["append"] == false) {
+            } else if(data["append"] == false) {
                 this.groups = data["groups"];
             }
         },
@@ -139,7 +151,7 @@ const app = Vue.createApp({
         response_discoverGroups(data) {
             if(data["append"] == true) {
                 this.groups = this.groups.concat(data["groups"]);
-            if(data["append"] == false) {
+            } else if(data["append"] == false) {
                 this.groups = data["groups"];
             }
         }

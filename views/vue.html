@@ -30,7 +30,7 @@
                             style="margin-top: 8px;">Log in</h1>
                     <form   class="input flex-column" 
                             style="gap: 8px;"
-                            v-on:submit.prevent="logIn"
+                            v-on:submit.prevent="gui_logIn"
                             style="width: 50%; height: 100%;">
                         
                         <p class="text-no-margin">Username</p>
@@ -64,14 +64,16 @@
                         <div    class="flex-row flex-middle"
                                 style="margin-bottom: 16px;">
                             <p     class="text-no-margin"
-                                    style="font-size: 18px;">{{ loginUsername }}</p>
+                                    style="font-size: 18px;">{{ username }}</p>
     
-                            <button class="button-style-light button-size-compact push-left" v-on:click="logOut">
+                            <button class="button-style-light button-size-compact push-left" 
+                                    v-on:click="gui_logOut">
                                 Log Out
                             </button>
                         </div>
     
-                        <div class="flex-column">
+                        <div    class="flex-column"
+                                style="gap: 8px;">
                             <div v-on:click="showDiscoverGroups = true">
                                 <p class="text-no-margin text-hover-highlight text-hover-pointer"
                                     style="padding-left: 8px;">
