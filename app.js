@@ -50,7 +50,7 @@ const GROUP_NAME_TAKEN = 212;
 
 var app = express();
 var http = require('http').Server(app);
-var io = require('socket.io')(http, { path: '/rrchat/socket.io' });
+var io = require('socket.io')(http, { path: '/rrchat/socket.io', origins: '*:*' });
 var port = process.env.PORT || 3789;
 
 
