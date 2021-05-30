@@ -1,3 +1,4 @@
+/* eslint-disable */
 
 const LOGGED_IN = 100;
 const REGISTERED = 101;
@@ -96,7 +97,7 @@ function pushNotification(message, type) {
 }
 
 
-var socket = io.connect('https://rainisr.ee', { path: '/rrchat/socket.io' });
+let socket = io.connect('https://rainisr.ee', { path: '/rrchat/socket.io' });
 
 // Groups
 let nickname = "Not logged in";
@@ -115,7 +116,7 @@ socket.on("disconnect", () => {
     logOut();
 
     pushNotification("Connection lost");
-    scoket = null;
+    socket = null;
 });
 
 

@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 // server.js
 // express initializes variable app to be a function handler that you can supply an HTTP server
 
@@ -372,7 +373,7 @@ function storeMessage(senderID, chatID, content, callback) {
   content = escapeHtml(content);
 
   let sql = `insert into messages (sender, chat, content) values(?, ?, ?)`;
-
+  
   connection.query(sql, [senderID, chatID, content], (err, results) => {
     if(err) throw err;
     
@@ -407,30 +408,45 @@ function sendMessage(senderID, chatID, content, callback) {
 }
 
 // callback(groups: {id, name}[])
-function listPublicGroups(userID, callback, limit = 30) {
+function listPublicGroups(callback, start = 0) {
+
+  // let sql = `
+  // SELECT chats.id, chats.name, IFNULL(line.isMember,0) AS isMember, second.members 
+  // FROM chats 
+  // LEFT JOIN (
+  //   SELECT 1 AS isMember, members.chat 
+  //   FROM members 
+  //   WHERE members.user=?
+  // ) AS line 
+  // ON chats.id=line.chat 
+  // LEFT JOIN (
+  //   SELECT chats.id, IFNULL(num.num,0) AS members 
+  //   FROM chats 
+  //   LEFT JOIN (
+  //     SELECT chat, count(*) AS num 
+  //     FROM members 
+  //     GROUP BY chat
+  //   ) AS num 
+  //   ON num.chat=chats.id
+  //   WHERE chats.public=TRUE
+  // ) AS second ON chats.id=second.id
+  // WHERE chats.public=TRUE ORDER BY members DESC LIMIT ?;`;
+
   let sql = `
-    SELECT chats.id, chats.name, IFNULL(line.isMember,0) AS isMember, second.members 
+    SELECT id, name, line.timestamp 
     FROM chats 
     LEFT JOIN (
-      SELECT 1 AS isMember, members.chat 
-      FROM members 
-      WHERE members.user=?
-    ) AS line 
-    ON chats.id=line.chat 
-    LEFT JOIN (
-      SELECT chats.id, IFNULL(num.num,0) AS members 
-      FROM chats 
-      LEFT JOIN (
-        SELECT chat, count(*) AS num 
-        FROM members 
-        GROUP BY chat
-      ) AS num 
-      ON num.chat=chats.id
-      WHERE chats.public=TRUE
-    ) AS second ON chats.id=second.id
-    WHERE chats.public=TRUE ORDER BY members DESC LIMIT ?;`;
+      SELECT chat, UNIX_TIMESTAMP(messages.timestamp) AS timestamp
+      FROM messages 
+      GROUP BY chat
+    ) AS line
+    ON line.chat=id 
+    WHERE public=1 AND (line.timestamp<1620909498 OR line.timestamp IS NULL)
+    ORDER BY timestamp 
+    DESC;
+  `;
 
-  connection.query(sql, [userID, limit], (err, results) => {
+  connection.query(sql, [start], (err, results) => {
     if(err) throw err;
 
     callback(results);
@@ -699,9 +715,9 @@ io.on('connection', function(socket){
                 socket.emit('data', "discover", data);
               }, data["start"] ? data["start"] : 0);
             } else {
-              listPublicGroups(userID, (data) => {
+              listPublicGroups((data) => {
                 socket.emit('data', "discover", data);
-              });
+              }, data["start"]);
             }
           }
           break;
@@ -775,6 +791,7 @@ io.on('connection', function(socket){
               });
             });
           });
+          break;
       default:
         break;
     }

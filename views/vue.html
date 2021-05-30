@@ -14,7 +14,7 @@
 
 
 
-        <div    id="login" 
+        <div    id="logIn" 
                 class="outer"
                 v-show="!loggedIn"
                 style="display: none;">
@@ -25,7 +25,8 @@
                 <!-- Two panes -->
                 <img    src="/rrchat/public/background.jpg"
                         style="width: 50%; height: 100%; object-fit: cover;">
-                <div class="flex-column flex-middle fill">
+                <div    class="flex-column flex-middle fill"
+                        v-show="!showCreateAccount">
                     <h1     class="text-title push-bottom"
                             style="margin-top: 8px;">Log in</h1>
                     <form   class="input flex-column" 
@@ -34,13 +35,41 @@
                             style="width: 50%; height: 100%;">
                         
                         <p class="text-no-margin">Username</p>
-                        <input v-model="loginUsername" type="text">
+                        <input v-model="logInUsername" type="text">
                         <p class="text-no-margin">Password</p>
-                        <input v-model="loginPassword" type="password">
-                        <input type="submit" value="Log In">
+                        <input v-model="logInPassword" type="password">
+                        <input  type="submit" 
+                                value="Log In"
+                                :disabled="waitingToBeLoggedIn">
                     </form>
-                    <a      class="text-no-margin push-top"
+                    <p class="text-title">{{ logInMessage }}</p>
+                    <a      class="text-no-margin push-top text-hover-highlight text-hover-pointer"
+                            v-on:click="showCreateAccount = true"
                             style="margin-bottom: 8px;">Create an account</a>
+                </div>
+                <div    class="flex-column flex-middle fill"
+                        v-show="showCreateAccount">
+                    <h1     class="text-title push-bottom"
+                            style="margin-top: 8px;">Register</h1>
+                    <form   class="input flex-column" 
+                            style="gap: 8px;"
+                            v-on:submit.prevent="gui_register"
+                            style="width: 50%; height: 100%;">
+                        
+                        <p class="text-no-margin">Username</p>
+                        <input v-model="registerUsername" type="text">
+                        <p class="text-no-margin">Password</p>
+                        <input v-model="registerPassword" type="password">
+                        <p class="text-no-margin">Repeat password</p>
+                        <input  v-model="registerPasswordRepeated" type="password">
+                        <input  type="submit" 
+                                value="Register"
+                                :disabled="waitingToBeLoggedIn">
+                    </form>
+                    <p class="text-title">{{ registerMessage }}</p>
+                    <a      class="text-no-margin push-top text-hover-highlight text-hover-pointer"
+                            v-on:click="showCreateAccount = false"
+                            style="margin-bottom: 8px;">I have an account</a>
                 </div>
 
 
@@ -83,16 +112,7 @@
         
                             <hr>
         
-                            <div>
-                                <p class="text-no-margin text-hover-highlight text-hover-pointer"
-                                style="padding-left: 8px;">
-                                    Join a group
-                                </p>
-                            </div>
-        
-                            <hr>
-        
-                            <div>
+                            <div v-on:click="showCreateGroup = true">
                                 <p class="text-no-margin text-hover-highlight text-hover-pointer"
                                 style="padding-left: 8px;">
                                     Create a group
@@ -154,6 +174,9 @@
             </div>
         </div>
 
+
+
+
         <div    id="discover-groups" 
                 class="outer black-bg"
                 v-show="showDiscoverGroups"
@@ -163,15 +186,27 @@
 
 
                 <!-- Title bar -->
-                <h1     class="text-title"
+                <div    class="flex-row"
+                        style="position: relative;">
+                    <div    class="flex-column flex-middle" 
+                            style="width: 24px; height: 100%; position: absolute; top: 0; left: 0;">
+                        <svg    class="button-style-light"
+                                style="width: 24px; height: 24px;"
+                                v-on:click="showDiscoverGroups = false"
+                                width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M60 20L30 50L60 80" stroke="black" stroke-width="8" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h1 class="text-title"
                         style="font-size: 24px; margin: 4px 0; flex: 0 0 auto;">Discover groups</h1>
+                </div>
                 <hr>
 
                 <!-- Search bar -->
                 <form   class="search" 
-                        v-on:submit.prevent="return false;"
+                        v-on:submit.prevent="gui_discoverGroupsSearch()"
                         style="flex: 0 0 auto; height: 32px; margin: 16px 0;">
-                    <input type="text" placeholder="Search by name">
+                    <input type="text" placeholder="Search by name" v-model="discoverGroupsSearchInput">
                     <input type="submit" value="Search">
                 </form>
 
@@ -181,6 +216,7 @@
                     <div class="flex-column">
                         <!-- Found group -->
                         <div    class="flex-row flex-middle" 
+                                style="height: 48px;"
                                 v-for="group in discoverGroupsResults">
                             <div class="flex-column">
                                 <h1 class="text-no-margin"
@@ -193,9 +229,88 @@
                             <!-- Spacer -->
                             <div style="margin-right: auto;"></div>
 
-                            <button class="button-style-one-way button-size-tall">Join</button>
+                            <button :disabled="group[2]" 
+                                    class="button-style-one-way button-size-compact"
+                                    v-on:click="gui_discoverGroupsJoin(group)">{{group[2] ? "Joined" : "Join"}}</button>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+
+
+
+        <div    id="create-group" 
+                class="outer black-bg"
+                v-show="showCreateGroup"
+                style="display: none;">
+            <div    class="window flex-column"
+                    style="width: min(480px, 100%); height: 256px; padding: 0 16px 16px 16px;">
+
+
+                <!-- Title bar -->
+                <div    class="flex-row"
+                        style="position: relative;  flex: 0 0 auto;">
+                    <div    class="flex-column flex-middle" 
+                            style="width: 24px; height: 100%; position: absolute; top: 0; left: 0;">
+                        <svg    class="button-style-light"
+                                style="width: 24px; height: 24px;"
+                                v-on:click="showCreateGroup = false"
+                                width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M60 20L30 50L60 80" stroke="black" stroke-width="8" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h1 class="text-title"
+                        style="font-size: 24px; margin: 4px 0; flex: 0 0 auto;">Create a group</h1>
+                </div>
+                <hr>
+
+                <!-- Search bar -->
+                <div    class="flex-column"
+                        style=" margin: 16px 0; flex: 0 0 auto;">
+                    <p  class="text-no-margin" 
+                        v-if="createGroupIsNameTaken != -1"
+                        style="margin-bottom: 8px;"
+                        v-bind:style="createGroupIsNameTaken ? 'color: #eb6960;' : 'color: #68ba81'">
+                        {{ createGroupIsNameTaken ? "This name is taken" : "Ready to go" }}
+                    </p>
+                    <form   class="search" 
+                            v-on:submit.prevent="gui_createGroupCheck()"
+                            style="flex: 0 0 auto; height: 32px;">
+                        <input type="text" placeholder="Name" v-model="createGroupNameInput">
+                        <input type="submit" value="Check">
+                    </form>
+                </div>
+
+                <form   class="flex-column"
+                        style=" flex: 1 1 auto;">
+                    <h2 class="text-no-margin">Privacy</h2>
+                    <div style="padding: 16px;">
+                        <div class="flex-row">
+                            <input  id="__createGroupIsPublic" 
+                                    type="checkbox"
+                                    v-model="createGroupIsPublic"
+                                    @change="createGroupRequestToJoin = createGroupRequestToJoin && createGroupIsPublic">
+                            <label for="__createGroupIsPublic">Is public</label>
+                        </div>
+    
+                        <div class="flex-row">
+                            <input  id="__createGroupRequestToJoin" 
+                                    type="checkbox"
+                                    v-model="createGroupRequestToJoin"
+                                    :disabled="!createGroupIsPublic">
+                            <label for="__createGroupRequestToJoin">Request to join</label>
+                        </div>
+                    </div>
+                </form>
+
+                <div class="flex-column flex-middle">
+                    <button class="button-style-light button-size-compact"
+                            style=" flex: 0 0 auto;"
+                            v-on:click="gui_createGroup()">
+                        Create group
+                    </button>
                 </div>
             </div>
         </div>
