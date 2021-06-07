@@ -16,7 +16,7 @@
 
         <div    id="logIn" 
                 class="outer"
-                v-show="!loggedIn"
+                v-show="!loggedIn && false"
                 style="display: none;">
             <div    class="window flex-row"
                     style="width: min(512px, 100%); height: min(320px, 100%);">
@@ -80,7 +80,7 @@
 
         <div    id="feed"
                 class="outer"
-                v-show="loggedIn"
+                v-show="loggedIn && false"
                 style="display: none;">
             <div    class="flex-row"
                     style="width: min(640px, 100%); height: max-content; max-height: calc(100% - 2 * 32px);">
@@ -103,7 +103,7 @@
     
                         <div    class="flex-column"
                                 style="gap: 8px;">
-                            <div v-on:click="showDiscoverGroups = true">
+                            <div v-on:click="showDiscoverGroups = true; request_discoverGroups();">
                                 <p class="text-no-margin text-hover-highlight text-hover-pointer"
                                     style="padding-left: 8px;">
                                     Discover groups
@@ -145,8 +145,8 @@
                     <div    class="flex-column group-card"
                             v-for="invitation in invitations">
                         <div>
-                            <h1 class="text-no-margin">{{ invitation[0] }}</h1>
-                            <p class="text-no-margin">Invited by {{ invitation[1] }}</p>
+                            <h1 class="text-no-margin">{{ invitation["group"] }}</h1>
+                            <p class="text-no-margin">Invited by {{ invitation["inviter"] }}</p>
                         </div>
                     </div>
 
@@ -157,8 +157,8 @@
                     <div    class="flex-column group-card"
                             v-for="group in groups">
                         <div>
-                            <h1 class="text-no-margin">{{ group[0] }}</h1>
-                            <p class="text-no-margin">{{ group[1] }}</p>
+                            <h1 class="text-no-margin">{{ group["name"] }}</h1>
+                            <p class="text-no-margin">{{ group["message"] }}</p>
                         </div>
                     </div>
 
@@ -172,6 +172,42 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <div    class="fill"
+                syle="position: relative;"
+                v-show="showChat">
+
+            <div    class="flex-row"
+                    style="position: absolute; top: 0; left: 0; width: 100%; height: 32px;">
+                <div    class="flex-row flex-middle"
+                        style="position: absolute; left: 0; top: 0; width: 32px; height: 32px;">
+                    <svg    class="button-style-light"
+                            style="width: 24px; height: 24px;"
+                            v-on:click="showDiscoverGroups = false"
+                            width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M60 20L30 50L60 80" stroke="black" stroke-width="8" stroke-linecap="round"/>
+                    </svg>
+                </div>
+
+
+                <h1 class="text-title">{{ showChatName }}</h1>
+            </div>
+
+            <div style="position: absolute; top: 32px; left: 0; width: 100%; height: calc(100% - 2 * 32px); overflow: auto;">
+                <div class="flex-column-reverse">
+                    <div    style="height: auto; width: fit-content; max-width: calc(100% - 2 * 16px);"
+                            v-for="(message, i) in messages">
+                        <p>This is a message</p>
+                    </div>
+                </div>
+            </div>
+
+            <form   class="flex-row search"
+                    style="position: absolute; bottom: 0; left: 0; width: 100%; height: 32px;">
+                <input type="text" placeholder="Write something">
+                <input type="submit" value="Send">
+            </form>
         </div>
 
 
@@ -221,17 +257,17 @@
                             <div class="flex-column">
                                 <h1 class="text-no-margin"
                                     style="font-size: 24px;">
-                                    {{ group[0] }}
+                                    {{ group["name"] }}
                                 </h1>
-                                <p  class="text-no-margin">Members: {{ group[1] }}</p>
+                                <p  class="text-no-margin">Members: {{ group["members"] }}</p>
                             </div>
                             
                             <!-- Spacer -->
                             <div style="margin-right: auto;"></div>
 
-                            <button :disabled="group[2]" 
+                            <button :disabled="group['isMember']" 
                                     class="button-style-one-way button-size-compact"
-                                    v-on:click="gui_discoverGroupsJoin(group)">{{group[2] ? "Joined" : "Join"}}</button>
+                                    v-on:click="gui_discoverGroupsJoin(group)">{{group["isMember"] ? "Joined" : "Join"}}</button>
                         </div>
                     </div>
                 </div>

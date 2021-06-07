@@ -52,12 +52,11 @@ const GROUP_NAME_TAKEN = 212;
 var app = express();
 var http = require('http').Server(app);
 var io = require('socket.io')(http, { path: '/rrchat/socket.io', origins: '*:*' });
-var port = process.env.PORT || 3790;
+var port = process.env.PORT || 3789;
 
 
-// route to /views/index.html - defined route handler '/' that gets called when we hit our website home page
-app.get('/rrchat', function(req, res) {
-	res.sendFile(__dirname + '/views/index.html')
+app.get('/rrchat/dev', function(req, res) {
+	res.sendFile(__dirname + '/views/vue.html')
 })
 
 app.use('/rrchat/public', express.static('./public'));
@@ -183,13 +182,13 @@ function getGroups(userID, callback) {
 // callback(groups: [{id, name, message}, ..])
 function getGroupsFeed(userID, callback) {
   let sql = `
-  SELECT chats.id, chats.name, package.content 
+  SELECT chats.id, chats.name, package.content as message, package.timestamp
   FROM chats 
   INNER JOIN (
-    SELECT members.chat, latest.content 
+    SELECT members.chat, latest.content, latest.timestamp
     FROM members 
     LEFT JOIN (
-      SELECT o.chat, o.content 
+      SELECT o.chat, o.content, o.timestamp
       FROM \`messages\` o 
       LEFT JOIN \`messages\` b 
       ON o.chat = b.chat AND o.timestamp < b.timestamp 
@@ -208,12 +207,12 @@ function getGroupsFeed(userID, callback) {
 }
 
 // callback(name, id, message)
-function getGroupFeedEntry(chatID, callback) {
+function getGroupsFeedEntry(chatID, callback) {
   let sql = `
-  SELECT chats.id, chats.name, line.content 
+  SELECT chats.id, chats.name, line.content, line.timestamp 
   FROM chats 
   LEFT JOIN (
-    SELECT o.chat, o.content 
+    SELECT o.chat, o.content, o.timestamp
     FROM \`messages\` o 
     LEFT JOIN \`messages\` b 
     ON o.chat = b.chat 
@@ -326,7 +325,7 @@ function isGroupPublic(groupID, callback) {
 
 // callback(taken: bool)
 function isGroupNameTaken(groupName, callback) {
-  let sql = `SELECT * FROM chats WHETE name=?`;
+  let sql = `SELECT * FROM chats WHERE name=?`;
 
   connection.query(sql, [groupName], (err, results) => {
     if(err) throw err;
@@ -348,9 +347,15 @@ function isInvited(invitationID, invitedID, callback) {
 
 // ### COMMUNICATION ###
 
-// callback(response: number)
-function createGroup(data) {
-  let sql = `INSERT INTO chats (name, admin, public, requestToJoin, othersCanInvite) values(?)`;
+// callback(inserID: number)
+function createGroup(name, admin, isPublic, requestToJoin, callback) {
+  let sql = `INSERT INTO chats (name, admin, public, requestToJoin) values(?, ?, ?, ?)`;
+
+  connection.query(sql, [name, admin, isPublic, requestToJoin], (err, results) => {
+    if(err) throw err;
+    
+    callback(results.insertId);
+  });
 }
 
 // callback(belongs: bool)
@@ -404,52 +409,53 @@ function sendMessage(senderID, chatID, content, callback) {
 }
 
 // callback(groups: {id, name}[])
-function listPublicGroups(callback, start = 0) {
-
-  // let sql = `
-  // SELECT chats.id, chats.name, IFNULL(line.isMember,0) AS isMember, second.members 
-  // FROM chats 
-  // LEFT JOIN (
-  //   SELECT 1 AS isMember, members.chat 
-  //   FROM members 
-  //   WHERE members.user=?
-  // ) AS line 
-  // ON chats.id=line.chat 
-  // LEFT JOIN (
-  //   SELECT chats.id, IFNULL(num.num,0) AS members 
-  //   FROM chats 
-  //   LEFT JOIN (
-  //     SELECT chat, count(*) AS num 
-  //     FROM members 
-  //     GROUP BY chat
-  //   ) AS num 
-  //   ON num.chat=chats.id
-  //   WHERE chats.public=TRUE
-  // ) AS second ON chats.id=second.id
-  // WHERE chats.public=TRUE ORDER BY members DESC LIMIT ?;`;
+function listPublicGroups(userID, callback, start = 0, limit = 30) {
 
   let sql = `
-    SELECT id, name, line.timestamp 
+    SELECT chats.id, chats.name, IFNULL(line.isMember,0) AS isMember, second.members 
     FROM chats 
     LEFT JOIN (
-      SELECT chat, UNIX_TIMESTAMP(messages.timestamp) AS timestamp
-      FROM messages 
-      GROUP BY chat
-    ) AS line
-    ON line.chat=id 
-    WHERE public=1 AND (line.timestamp<1620909498 OR line.timestamp IS NULL)
-    ORDER BY timestamp 
-    DESC;
+      SELECT 1 AS isMember, members.chat 
+      FROM members 
+      WHERE members.user=?
+    ) AS line 
+    ON chats.id=line.chat 
+    LEFT JOIN (
+      SELECT chats.id, IFNULL(num.num,0) AS members 
+      FROM chats 
+      LEFT JOIN (
+        SELECT chat, count(*) AS num 
+        FROM members 
+        GROUP BY chat
+      ) AS num 
+      ON num.chat=chats.id
+      WHERE chats.public=TRUE
+    ) AS second ON chats.id=second.id
+    WHERE chats.public=TRUE ORDER BY members DESC LIMIT ?,?;
   `;
 
-  connection.query(sql, [start], (err, results) => {
+  //let sql = `
+  //  SELECT id, name, line.timestamp 
+  //  FROM chats 
+  //  LEFT JOIN (
+  //    SELECT chat, UNIX_TIMESTAMP(messages.timestamp) AS timestamp
+  //    FROM messages 
+  //    GROUP BY chat
+  //  ) AS line
+  //  ON line.chat=id 
+  //  WHERE public=1 AND (line.timestamp<? OR line.timestamp IS NULL)
+  //  ORDER BY timestamp 
+  //  DESC;
+  //`;
+
+  connection.query(sql, [userID, start, limit], (err, results) => {
     if(err) throw err;
 
     callback(results);
   });
 }
 
-// callback(groups: {id, name}[])
+// callback(groups: {id, name, isMember, numMembers}[])
 function searchPublicGroups(userID, search, callback, start = 0, limit = 30) {
   let sql = `
     SELECT chats.id, chats.name, IFNULL(line.isMember,0) AS isMember, second.members 
@@ -558,13 +564,51 @@ io.on('connection', function(socket){
   let currentRoom = null;
   let chatID = 0;
 
-  socket.on('join', function() {
+  socket.on('logIn', (data) => {
+    if(!data) return;
 
+    if(!("username" in data) || !("password" in data)) {
+      socket.emit('loggedIn', {
+        "message": "Missing information"
+      });
+    }
+
+    if(loggedIn) {
+      socket.emit('loggedIn', {
+        "message": "Already logged in"
+      });
+    }
+
+    userExists(data["username"], (id) => {
+      if(id == 0) {
+        socket.emit('loggedIn', {
+          "message": "User doesn't exist"
+        });
+        return;
+      }
+
+      checkPassword(id, data["username"], data["password"], (match) => {
+        if(!match) {
+          socket.emit('loggedIn', {
+            "message": "Wrong password"
+          });
+          return;
+        }
+
+        loggedIn = true;
+        nickname = data["username"];
+        userID = id;
+
+        socket.emit('loggedIn', {
+          "nickname": nickname
+        });
+      })
+    });
   });
 
-  socket.on('logout', function() {
-    socket.leave(currentRoom);
-    
+  socket.on('logOut', () => {
+    socket.emit('loggedOut');
+
     loggedIn = false;
     nickname = '';
     userID = 0;
@@ -572,232 +616,180 @@ io.on('connection', function(socket){
     chatID = 0;
   });
 
-  socket.on('register', function(username, pass) {  
-    if(loggedIn) {
-      socket.emit('response', ALREADY_LOGGED_IN);
-      return;
-    }
+  socket.on('disconnect', () => {
+    loggedIn = false;
+    nickname = '';
+    userID = 0;
+    currentRoom = null;
+    chatID = 0;
+  });
 
-    userExists(username, (id) => {
-      if(id != 0) {
-        socket.emit('response', USERNAME_TAKEN);
-        return;
-      }
+  socket.on('groupsFeed', (data) => {
+    if(!data) return;
 
-      createUser(username, pass, (id) => {
-        loggedIn = true;
-        nickname = username;
-        userID = id;
-
-        socket.emit('response', REGISTERED, { "nickname": nickname });
-
-        // send all groups
-        getGroupsFeed(userID, (list) => {
-          socket.emit('data', "groups", list);
+    if("oldestTimestamp" in data) {
+      getGroupsFeed(userID, (groups) => {
+        socket.emit('groupsFeed', {
+          "append": false,
+          "groups": groups
         });
+      });
+    } else {
+
+      // TODO: return everything after "oldestTimestamp"
+      getGroupsFeed(userID, (groups) => {
+        socket.emit('groupsFeed', {
+          "append": false,
+          "groups": groups
+        });
+      });
+    }
+  });
+
+  socket.on('invitationsFeed', (data) => {
+    if(!data) return;
+
+    if("oldestTimestamp" in data) {
+      getInvitations((invitations) => {
+        socket.emit('invitationsFeed', {
+          "append": false,
+          "invitations": invitations
+        });
+      });
+    } else {
+
+      // TODO: return everything after "oldestTimestamp"
+      getInvitations((invitations) => {
+        socket.emit('invitationsFeed', {
+          "append": false,
+          "invitations": invitations
+        });
+      });
+    }
+  });
+
+  socket.on('discoverGroups', (data) => {
+    if(!data) return;
+
+    if("oldestTimestamp" in data) {
+      listPublicGroups(userID, (discoverGroupsResults) => {
+        socket.emit('discoverGroupsResultsFeed', {
+          "append": false,
+          "discoverGroupsResults": discoverGroupsResults
+        });
+      }, data["oldestTimestamp"]);
+    } else {
+      listPublicGroups(userID, (discoverGroupsResults) => {
+        socket.emit('discoverGroupsResultsFeed', {
+          "append": true,
+          "discoverGroupsResults": discoverGroupsResults
+        });
+      });
+    }
+  });
+
+  socket.on('discoverGroupsSearch', (data) => {
+    if(!data) return;
+
+    if(!"search" in data) return;
+
+    if("oldestTimestamp" in data) {
+      searchPublicGroups(userID, data["search"], (data) => {
+        socket.emit('discoverGroupsResultsFeed', {
+          "append": false,
+          "discoverGroupsResults": data
+        });
+      }, data["oldestTimestamp"]);
+    } else {
+      searchPublicGroups(userID, data["search"], (data) => {
+        socket.emit('discoverGroupsResultsFeed', {
+          "append": true,
+          "discoverGroupsResults": data
+        });
+      });
+    }
+  });
+
+  socket.on('discoverGroupsJoin', (data) => {
+    if(!data) return;
+
+    if(!"chatID" in data) return;
+
+    requestMember(userID, data["chatID"], (response) => {
+      if(response == DISCOVER_BECAME_MEMBER) {
+        socket.emit('discoverGroupsJoin', {
+          "chatID": data["chatID"]
+        });
+
+        getGroupsFeedEntry(data["chatID"], (groups) => {
+          socket.emit('groupsFeed', {
+            "append": true,
+            "groups": groups
+          });
+        });
+      }
+    });
+  });
+
+  socket.on('createGroupCheck', (data) => {
+    if(!data) return;
+
+    if(!("name" in data) || data["name"].length == 0) return;
+
+    isGroupNameTaken(data["name"], (isTaken) => {
+      socket.emit('createGroupCheck', {
+        "isTaken": isTaken
       });
     });
   });
 
-  socket.on('login', function(username, pass) {  
-    if(loggedIn) {
-      socket.emit('response', ALREADY_LOGGED_IN);
-      return;
-    }
+  socket.on('createGroup', (data) => {
+    if(!data) return;
 
-    userExists(username, (id) => {
-      if(id == 0) {
-        socket.emit('response', USER_DOESNT_EXIST);
-        return;
-      }
+    if(!("name" in data) || !("isPublic" in data) || !("requestToJoin" in data) || (data["name"].length < 1)) return;
 
-      console.log("id check passed");
-
-      checkPassword(id, username, pass, (match) => {
-        if(!match) {
-          socket.emit('response', WRONG_CREDENTIALS);
-          return;
-        }
-        console.log("logged in");
-
-        loggedIn = true;
-        nickname = username;
-        userID = id;
-
-        socket.emit('response', LOGGED_IN, { "nickname": nickname });
-
-        // send all groups
-        getGroupsFeed(userID, (list) => {
-          socket.emit('data', "groups", list);
-        });
-
-        // send all invitations
-        getInvitations(userID, (list) => {
-          socket.emit('data', "invitations", list);
-        });
-      })
+    createGroup(data["name"], userID, data["isPublic"], data["requestToJoin"], () => {
+      socket.emit('createGroup');
     });
   });
 
-  socket.on('get', function(label) {
-    if(!loggedIn) {
-      socket.emit('response', NOT_LOGGED_IN);
+  socket.on('register', function(data) {  
+    if(loggedIn) {
+      socket.emit('register', {
+        "message": "Already logged in"
+      });
       return;
     }
 
-    switch (label) {
-      case "groups":
-        getGroupNames(userID, (list) => {
-          socket.emit('data', label, list);
+    if(!data) return;
+
+    if(!("username" in data) || !("password" in data)) return;
+
+    userExists(data["username"], (id) => {
+      if(id != 0) {
+        socket.emit('register', {
+          "message": "Username is taken"
         });
-        break;
-      case "members":
-        getGroupMembers(chatID, (list) => {
-          socket.emit('data', label, list);
+        return;
+      }
+
+      createUser(data["username"], data["password"], (id) => {
+        loggedIn = true;
+        nickname = data["username"];
+        userID = id;
+
+        socket.emit('register', {
+          "nickname": nickname
         });
-        break;
-    
-      default:
-        socket.emit('data', label, null);
-        break;
-    }
-  });
-
-  socket.on('chat message', function(msg) {
-    if(!loggedIn) {
-      socket.emit('response', NOT_LOGGED_IN);
-      return;
-    }
-
-    broadcastMessage(userID, chatID, msg);
-  });
-
-  socket.on('do', function(command, data) {
-    if(!loggedIn) {
-      socket.emit('response', NOT_LOGGED_IN);
-      return;
-    }
-
-    switch (command) {
-      case "go":
-        console.log("do.go 1");
-        if(!data["group"]) return;
-        console.log("do.go 2");
-
-        belongsInGroup(userID, data["group"], (belongs) => {
-          console.log("do.go 3");
-          if(belongs) {
-            console.log("do.go 4");
-            chatID = data["group"];
-            
-            if(currentRoom != null) socket.leave(currentRoom);
-            currentRoom = "group" + data["group"];
-            socket.join(currentRoom);
-            
-            getGroupName(data["group"], (name) => {
-              console.log("sending '"+nickname+"' to: ", name);
-              socket.emit('do', "change group", { "name": name });
-
-              printChatHistory(socket, chatID);
-            });
-          }
-        });
-        break;
-        case "discover":
-          console.log(data);
-          if(data) {
-            if(data["search"] && data["search"] != null) {
-              searchPublicGroups(userID, data["search"], (data) => {
-                socket.emit('data', "discover", data);
-              }, data["start"] ? data["start"] : 0);
-            } else {
-              listPublicGroups((data) => {
-                socket.emit('data', "discover", data);
-              }, data["start"]);
-            }
-          }
-          break;
-        case "request-member":
-          if(!data || !data["id"]) break;
-
-          belongsInGroup(userID, data["id"], (belongs) => {
-            if(belongs) {
-              socket.emit('response', ALREADY_IN_GROUP);
-              return;
-            }
-
-            isGroupPublic(data["id"], (isPublic) => {
-              if(!isPublic) {
-                socket.emit('response', PRIVATE_GROUP);
-                return;
-              }
-
-              requestMember(userID, data["id"], (response) => {
-                socket.emit('response', response, { "id": data["id"] });
-              });
-            });
-          });
-          break;
-        case "create-group":
-          if(!data) break;
-
-          // Check data
-          if(!data["name"] || data["name"].length == 0) {
-            socket.emit('response', GROUP_NAME_REQUIRED);
-            break;
-          }
-
-          if(data["public"] == true && data["others-can-invite"] == true) {
-            socket.emit('response', INVALID_OPTIONS);
-            break;
-          }
-
-          if(data["public"] == false && data["request-to-join"] == false) {
-            socket.emit('response', INVALID_OPTIONS);
-            break;
-          }
-
-          // If name isn't taken
-          isGroupNameTaken(data["name"], (taken) => {
-            if(taken) {
-              socket.emit('response', GROUP_NAME_TAKEN);
-              return;
-            }
-
-            createGroup(data, (response) => {
-              socket.emit('response', response);
-            });
-          });
-
-          break;
-        case "accept-invite":
-          if(!data) break;
-          if(!data["id"]) break;
-
-          isInvited(data["id"], userID, (id) => {
-            if(!id) return;
-
-            getInvitationChatID(data["id"], (chatID) => {
-              deleteInvitation(data["id"], (success) => {
-                addIntoGroup(userID, chatID);
-
-                getGroupFeedEntry(chatID, (feedEntry) => {
-                  socket.emit('data', "groups", [feedEntry]);
-                });
-              });
-            });
-          });
-          break;
-      default:
-        break;
-    }
+      });
+    });
   });
 });
 
 
 
 
-// http server listening for requests on port 3790
+// http server listening for requests on port 3789
 http.listen(port, function(){
-  console.log('listening on *:3790');
+  console.log('listening on *:3789');
 })

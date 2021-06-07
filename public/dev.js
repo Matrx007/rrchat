@@ -1,10 +1,6 @@
 /* eslint-disable */
 var socket = io.connect('https://rainisr.ee', { path: '/rrchat/socket.io' });
 
-
-
-
-
 const app = Vue.createApp({
     data() {
         return {
@@ -21,13 +17,13 @@ const app = Vue.createApp({
             groupsNewestTimestamp: 0,
             groupsOldestTimestamp: 0,
             groups: [
-                // name, last message, chatID                
+                // id, name, message,                 
             ],
 
             invitationsNewestTimestamp: 0,
             invitationsOldestTimestamp: 0,
             invitations: [
-                // name, inviter, chatID, invitationID
+                // id, inviter, group
             ],
 
             discoverGroupsResultsNewestTimestamp: 0,
@@ -35,7 +31,7 @@ const app = Vue.createApp({
             discoverGroupsSearchInput: '',
             discoverGroupsSearch: '',
             discoverGroupsResults: [
-                // name, members, joined, chatID, requestToJoin
+                // id, name, isMember, members
             ],
 
             // Create a group
@@ -58,6 +54,10 @@ const app = Vue.createApp({
             registerPasswordMismatch: false,
             registerMessage: '',
 
+            // chat
+            showChat: true,
+            showChatName: 'Group 1',
+
             // GUI
             showDiscoverGroups: false
         }
@@ -68,19 +68,13 @@ const app = Vue.createApp({
 
         gui_logIn() {
             this.loginMessage = '';
-            this.request_logIn({
-                "username": this.logInUsername, 
-                "password": this.logInPassword
-            });
+            this.request_logIn(
+                this.logInUsername, 
+                this.logInPassword
+            );
             this.logInUsername = '';
             this.logInPassword = '';
             this.waitingToBeLoggedIn = true;
-
-            // simulating server response
-            let vue = this;
-            setTimeout(function() {
-                vue.response_loggedIn({nickname: "John Doe"});
-            }, 1000);
         },
 
         gui_register() {
@@ -90,42 +84,24 @@ const app = Vue.createApp({
                 return;
             }
 
-            this.request_register({
-                "username": this.registerUsername, 
-                "password": this.registerPassword
-            });
+            this.request_register(
+                this.registerUsername, 
+                this.registerPassword
+            );
             this.registerUsername = '';
             this.registerPassword = '';
             this.registerPasswordRepeated = '';
             this.waitingToBeLoggedIn = true;
-
-            // simulating server response
-            let vue = this;
-            setTimeout(function() {
-                vue.response_loggedIn({nickname: "John Doe"});
-            }, 1000);
         },
 
         gui_logOut() {
             this.request_logOut();
             this.waitingToBeLoggedOut = true;
-
-            // simulating server response
-            let vue = this;
-            setTimeout(function() {
-                vue.response_loggedOut();
-            }, 1000);
         },
 
         gui_discoverGroupsJoin(group) {
             console.log(group);
-            this.request_discoverGroupsJoin(group);
-
-            // simulating server response
-            let vue = this;
-            setTimeout(function() {
-                vue.response_discoverGroupsJoin(group);
-            }, 1000);
+            this.request_discoverGroupsJoin(group["id"]);
         },
 
         gui_discoverGroupsSearch() {
@@ -136,74 +112,96 @@ const app = Vue.createApp({
         gui_createGroupCheck() {
             this.createGroupName = this.createGroupNameInput;
             this.request_createGroupCheck(this.createGroupName);
-
-            let vue = this;
-            setTimeout(() => {
-                let random = Math.round(Math.random()*1);
-                console.log(random);
-                vue.reponse_createGroupCheck(random);
-            }, 100);
         },
 
         gui_createGroup() {
-            let data = {
-                "name": this.createGroupName,
-                "isPublic": this.createGroupIsPublic,
-                "requestToJoin": this.createGroupRequestToJoin
-            };
-
-            console.log(data);
-
-            this.request_createGroup(data);
+            this.request_createGroup(
+                this.createGroupName,
+                this.createGroupIsPublic,
+                this.createGroupRequestToJoin
+            );
         },
 
         // ### CLIENT ACTIONS ###
 
         request_logIn(username, password) {
-            // TODO: send request to server
+            socket.emit('logIn', {
+                "username": username,
+                "password": password
+            });
         },
         request_logOut() {
-            // TODO: send request to server
+            socket.emit('logOut');
         },
 
         request_groupsFeed(oldestTimestamp = 0) {
             if(oldestTimestamp) {
-                // TODO: send request to server
+                socket.emit('groupsFeed');
             } else {
-                // TODO: send request to server
+                socket.emit('groupsFeed', {
+                    "oldestTimestamp": oldestTimestamp
+                });
+            }
+        },
+
+        request_invitationsFeed(oldestTimestamp = 0) {
+            if(oldestTimestamp) {
+                socket.emit('invitationsFeed');
+            } else {
+                socket.emit('invitationsFeed', {
+                    "oldestTimestamp": oldestTimestamp
+                });
             }
         },
 
         request_discoverGroups(oldestTimestamp = 0) {
             if(oldestTimestamp) {
-                // TODO: send request to server
+                socket.emit('discoverGroups');
             } else {
-                // TODO: send request to server
+                socket.emit('discoverGroups', {
+                    "oldestTimestamp": oldestTimestamp
+                });
             }
         },
 
         request_discoverGroupsSearch(search, oldestTimestamp = 0) {
             if(oldestTimestamp) {
-                // TODO: send request to server
+                socket.emit('discoverGroupsSearch', {
+                    "search": search
+                });
             } else {
-                // TODO: send request to server
+                socket.emit('discoverGroupsSearch', {
+                    "search": search,
+                    "oldestTimestamp": oldestTimestamp
+                });
             }
         },
 
-        request_discoverGroupsJoin(group) {
-            // TODO: send request to server
+        request_discoverGroupsJoin(groupID) {
+            socket.emit('discoverGroupsJoin', {
+                "chatID": groupID
+            });
         },
 
         request_createGroupCheck(name) {
-            // TODO: send request to server
+            socket.emit('createGroupCheck', {
+                "name": name
+            });
         },
 
-        request_createGroup(data) {
-            // TODO: send request to server
+        request_createGroup(name, isPublic, requestToJoin) {
+            socket.emit('createGroup', {
+                "name": name,
+                "isPublic": isPublic,
+                "requestToJoin": requestToJoin
+            });
         },
 
-        request_register(data) {
-            // TODO: send request to server
+        request_register(username, password) {
+            socket.emit('register', {
+                "username": username,
+                "password": password
+            });
         },
 
 
@@ -366,19 +364,21 @@ const app = Vue.createApp({
             }
         },
 
-        response_discoverGroupsJoin(group) {
-            console.log("comparing against: ", group);
-            this.discoverGroupsResults.some((g, i, arr) => {
-            console.log("forEach vals: ", g, i, arr);
-                if(g[3] == group[3]) {
-                    arr[i][2] = true;
-                    return true;
-                }
-            })
+        response_discoverGroupsJoin(data) {
+            if("chatID" in data) {
+                this.discoverGroupsResults.some((g, i, arr) => {
+                    if(g["id"] == data["chatID"]) {
+                        arr[i]["isMember"] = true;
+                        return true;
+                    }
+                })
+            }
         },
 
-        reponse_createGroupCheck(result) {
-            this.createGroupIsNameTaken = result;
+        response_createGroupCheck(data) {
+            if("isTaken" in data) {
+                this.createGroupIsNameTaken = data["isTaken"];
+            }
         },
 
         response_createGroup(data) {
@@ -399,9 +399,40 @@ const app = Vue.createApp({
                 this.registerMessage = data["message"];
             }
         }
+    },
+
+    mounted() {
+        socket.on('loggedIn', (data) => {
+            this.response_loggedIn(data);
+        });
+        socket.on('loggedOut', (data) => {
+            this.response_loggedOut(data);
+        });
+        socket.on('invitationsFeed', (data) => {
+            this.response_invitationsFeed(data);
+        });
+        socket.on('groupsFeed', (data) => {
+            this.response_groupsFeed(data);
+        });
+        socket.on('discoverGroupsResultsFeed', (data) => {
+            this.response_discoverGroupsResultsFeed(data);
+        });
+        socket.on('discoverGroupsJoin', (data) => {
+            this.response_discoverGroupsJoin(data);
+        });
+        socket.on('createGroupCheck', (data) => {
+            this.response_createGroupCheck(data);
+        });
+        socket.on('createGroup', (data) => {
+            this.response_createGroup(data);
+        });
+        socket.on('register', (data) => {
+            this.response_register(data);
+        });
     }
 });
 
-console.log("works?");
+
+
 
 app.mount("#app");
