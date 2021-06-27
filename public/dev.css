@@ -2,6 +2,12 @@ body {
     margin: 0;
     padding: 0;
     font: 15px Helvetica, Arial;
+    
+    background-image: url('https://wallpaperaccess.com/full/394275.jpg'); 
+    background-image: url('https://wallpaperaccess.com/full/1853607.jpg'); 
+    background-attachment: fixed;
+    background-size: cover;
+    background-position: center;
 }
 
 hr {
@@ -136,7 +142,7 @@ hr {
 }
 
 .button-style-one-way {
-    width: 64px;
+    width: 80px;
     height: calc(100% - 8px * 2);
     margin: 8px 0 8px 8px;
 
@@ -164,6 +170,10 @@ hr {
     height: 100%;
     
     padding: 8px;
+}
+
+.glass {
+    backdrop-filter: blur(16px);
 }
 
 /*
@@ -289,6 +299,45 @@ hr {
     background-color: var(--accent-color);
 
     cursor: pointer;
+}
+
+#chat .message {
+    width: 100%;
+    height: fit-content;
+}
+
+#chat .message .box {
+    width: fit-content;
+    max-width: 100%;
+    height: fit-content;
+    
+    padding: 4px 8px;
+    
+    background-color: #ddd;
+    border-radius: 4px;
+}
+
+#chat .message .box .content {
+    color: black;
+}
+
+#chat .message .sender {
+    font-size: 12px;
+    
+    color: #888;
+}
+
+#chat .message.sentMyself .box {
+    margin-left: auto;
+    background-color: var(--accent-color);
+}
+
+#chat .message.sentMyself .sender {
+    text-align: right;
+}
+
+#chat .message.sentMyself .box .content {
+    color: white;
 }
 
 /*

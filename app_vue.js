@@ -6,7 +6,7 @@
 // # NODE MODULES               #
 // ##############################
 
-const CryptoJS = require("crypto-js");
+const typeCheck = require("type-check").typeCheck;
 const express = require('express');
 
 const { groupEnd } = require('console');
@@ -15,7 +15,16 @@ const path = require('path');
 
 const mysql  = require('mysql');
 
-
+const options = {
+  customTypes: {
+    ValidString: {
+      typeOf: 'String',
+      validate: function(x) {
+        return x.length > 0;
+      }
+    }
+  }
+};
 
 // ##############################
 // # DATABASE AUTHENTICATION    #
@@ -179,10 +188,36 @@ function getGroups(userID, callback) {
   });
 }
 
+// callback(isPublic)
+function isGroupPublic(chatID, callback) {
+  let sql = `SELECT public FROM chats WHERE id=?;`;
+
+  connection.query(sql, [userID], (err, results, fields) => {
+    if(err) throw err;
+    
+    if(results.length > 0) {
+      callback(results[0]["public"]); 
+    }
+  });
+}
+
+// callback(requestToJoin)
+function isGroupRequestToJoin(chatID, callback) {
+  let sql = `SELECT requestToJoin FROM chats WHERE id=?;`;
+
+  connection.query(sql, [userID], (err, results, fields) => {
+    if(err) throw err;
+    
+    if(results.length > 0) {
+      callback(results[0]["requestToJoin"]); 
+    }
+  });
+}
+
 // callback(groups: [{id, name, message}, ..])
 function getGroupsFeed(userID, callback) {
   let sql = `
-  SELECT chats.id, chats.name, package.content as message, package.timestamp
+  SELECT chats.id, chats.name, package.content as message, LEAST(UNIX_TIMESTAMP(chats.created), UNIX_TIMESTAMP(package.timestamp)) AS timestamp
   FROM chats 
   INNER JOIN (
     SELECT members.chat, latest.content, latest.timestamp
@@ -209,7 +244,7 @@ function getGroupsFeed(userID, callback) {
 // callback(name, id, message)
 function getGroupsFeedEntry(chatID, callback) {
   let sql = `
-  SELECT chats.id, chats.name, line.content, line.timestamp 
+  SELECT chats.id, chats.name, line.content as message, LEAST(UNIX_TIMESTAMP(chats.created), UNIX_TIMESTAMP(line.timestamp)) AS timestamp
   FROM chats 
   LEFT JOIN (
     SELECT o.chat, o.content, o.timestamp
@@ -312,17 +347,6 @@ function getGroupID(groupName, callback) {
   });
 }
 
-// callback(public: bool)
-function isGroupPublic(groupID, callback) {
-  let sql = `select id from chats where id=? and chats.public=true`;
-
-  connection.query(sql, [groupID], (err, results) => {
-    if(err) throw err;
-
-    callback(results.length == 1);
-  });
-}
-
 // callback(taken: bool)
 function isGroupNameTaken(groupName, callback) {
   let sql = `SELECT * FROM chats WHERE name=?`;
@@ -345,6 +369,31 @@ function isInvited(invitationID, invitedID, callback) {
   });
 }
 
+// callback(requests: [id, requester, group, groupID])
+function getRequests(userID, callback) {
+  let sql = `
+  SELECT requests.id, asker.name AS requester, line.name AS \`group\`, chat AS \`groupID\` 
+  FROM requests 
+  INNER JOIN (
+    SELECT * 
+    FROM chats
+  ) AS line
+  ON requests.chat=line.id 
+  INNER JOIN (
+    SELECT * 
+    FROM users
+  ) AS asker
+  ON user=asker.id 
+  WHERE chat=? 
+  ORDER BY timestamp DESC`;
+
+  connection.query(sql, [userID], (err, results) => {
+    if(err) throw err;
+
+    callback(results);
+  });
+}
+
 // ### COMMUNICATION ###
 
 // callback(inserID: number)
@@ -360,7 +409,7 @@ function createGroup(name, admin, isPublic, requestToJoin, callback) {
 
 // callback(belongs: bool)
 function belongsInGroup(userID, groupID, callback) {
-  let sql = `select * from members where user=? and chat=?`;
+  let sql = `SELECT * FROM members WHERE user=? AND chat=?`;
 
   connection.query(sql, [userID, groupID], (err, results) => {
     if(err) throw err;
@@ -370,12 +419,12 @@ function belongsInGroup(userID, groupID, callback) {
 }
 
 // callback(messageID: number)
-function storeMessage(senderID, chatID, content, callback) {
+function storeMessage(senderID, chatID, content, content_type, callback) {
   content = escapeHtml(content);
 
-  let sql = `insert into messages (sender, chat, content) values(?, ?, ?)`;
+  let sql = `insert into messages (sender, chat, content, content_type) values(?, ?, ?, ?)`;
   
-  connection.query(sql, [senderID, chatID, content], (err, results) => {
+  connection.query(sql, [senderID, chatID, content, content_type], (err, results) => {
     if(err) throw err;
     
     callback(results.insertId);
@@ -384,7 +433,7 @@ function storeMessage(senderID, chatID, content, callback) {
 
 // callback(data: Object[])
 function getMessage(messageID, callback) {
-  let sql = `select * from messages where id=?`;
+  let sql = `select id, sender, chat, content_type, content, UNIX_TIMESTAMP(timestamp) AS timestamp from messages where id=?`;
 
   connection.query(sql, [messageID], (err, results) => {
     if(err) throw err;
@@ -394,14 +443,17 @@ function getMessage(messageID, callback) {
 }
 
 // callback(data: Object)
-function sendMessage(senderID, chatID, content, callback) {
-  storeMessage(senderID, chatID, content, (messageID) => {
-    getMessage(messageID, (data) => {
-      getUserName(data[0]["sender"], (sender) => {
-        callback({
+function sendMessage(senderID, chatID, content, content_type, callback) {
+  storeMessage(senderID, chatID, content, content_type, (messageID) => {
+    getMessage(messageID, (insertedMessages) => {
+      getUserName(insertedMessages[0]["sender"], (sender) => {
+          callback({
             "sender": sender, 
-            "content": data[0]["content"], 
-            "timestamp": data[0]["timestamp"]
+            "senderID": insertedMessages[0]["sender"], 
+            "chat": insertedMessages[0]["chat"], 
+            "content": insertedMessages[0]["content"], 
+            "content_type": insertedMessages[0]["content_type"], 
+            "timestamp": insertedMessages[0]["timestamp"]
           });
       });
     });
@@ -412,26 +464,29 @@ function sendMessage(senderID, chatID, content, callback) {
 function listPublicGroups(userID, callback, start = 0, limit = 30) {
 
   let sql = `
-    SELECT chats.id, chats.name, IFNULL(line.isMember,0) AS isMember, second.members 
+    SELECT chats.id, chats.name, IFNULL(line.isMember,0) AS isMember, second.members, chats.public, chats.requestToJoin, EXISTS(
+        SELECT id FROM requests WHERE requests.user=? AND requests.chat=chats.id
+    ) AS requested 
     FROM chats 
     LEFT JOIN (
-      SELECT 1 AS isMember, members.chat 
-      FROM members 
-      WHERE members.user=?
+        SELECT 1 AS isMember, members.chat 
+        FROM members 
+        WHERE members.user=?
     ) AS line 
     ON chats.id=line.chat 
     LEFT JOIN (
-      SELECT chats.id, IFNULL(num.num,0) AS members 
-      FROM chats 
-      LEFT JOIN (
+        SELECT chats.id, IFNULL(num.num,0) AS members 
+        FROM chats 
+        LEFT JOIN (
         SELECT chat, count(*) AS num 
         FROM members 
         GROUP BY chat
-      ) AS num 
-      ON num.chat=chats.id
-      WHERE chats.public=TRUE
-    ) AS second ON chats.id=second.id
-    WHERE chats.public=TRUE ORDER BY members DESC LIMIT ?,?;
+        ) AS num 
+        ON num.chat=chats.id
+        WHERE chats.public=TRUE
+    ) AS second 
+    ON chats.id=second.id
+    WHERE chats.public=TRUE AND chats.created > ? ORDER BY chats.created DESC LIMIT ?;
   `;
 
   //let sql = `
@@ -448,7 +503,7 @@ function listPublicGroups(userID, callback, start = 0, limit = 30) {
   //  DESC;
   //`;
 
-  connection.query(sql, [userID, start, limit], (err, results) => {
+  connection.query(sql, [userID, userID, start, limit], (err, results) => {
     if(err) throw err;
 
     callback(results);
@@ -457,8 +512,8 @@ function listPublicGroups(userID, callback, start = 0, limit = 30) {
 
 // callback(groups: {id, name, isMember, numMembers}[])
 function searchPublicGroups(userID, search, callback, start = 0, limit = 30) {
-  let sql = `
-    SELECT chats.id, chats.name, IFNULL(line.isMember,0) AS isMember, second.members 
+  /*let sql = `
+    SELECT chats.id, chats.name, IFNULL(line.isMember,0) AS isMember, second.members, chats.public, chats.requestToJoin
     FROM chats 
     LEFT JOIN (
       SELECT 1 AS isMember, members.chat 
@@ -477,12 +532,39 @@ function searchPublicGroups(userID, search, callback, start = 0, limit = 30) {
       ON num.chat=chats.id
       WHERE chats.public=TRUE
     ) AS second ON chats.id=second.id
-    WHERE chats.public=TRUE AND name LIKE ? ORDER BY members DESC LIMIT ?,?;`;
+    WHERE chats.public=TRUE AND name LIKE ? ORDER BY members DESC LIMIT ?,?;`;*/
 
+
+  let sql = `
+    SELECT chats.id, chats.name, IFNULL(line.isMember,0) AS isMember, second.members, chats.public, chats.requestToJoin, EXISTS(
+        SELECT id FROM requests WHERE requests.user=? AND requests.chat=chats.id
+    ) AS requested 
+    FROM chats 
+    LEFT JOIN (
+        SELECT 1 AS isMember, members.chat 
+        FROM members 
+        WHERE members.user=?
+    ) AS line 
+    ON chats.id=line.chat 
+    LEFT JOIN (
+        SELECT chats.id, IFNULL(num.num,0) AS members 
+        FROM chats 
+        LEFT JOIN (
+        SELECT chat, count(*) AS num 
+        FROM members 
+        GROUP BY chat
+        ) AS num 
+        ON num.chat=chats.id
+        WHERE chats.public=TRUE
+    ) AS second 
+    ON chats.id=second.id
+    WHERE chats.public=TRUE AND name LIKE ? AND chats.created > ? ORDER BY chats.created DESC LIMIT ?;
+  `;
+  
   // Don't allow underscores nor question marks
   search = search.replace('_', "\\_").replace('%', "\\%");
 
-  connection.query(sql, [userID, "%"+search+"%", start, limit], (err, results) => {
+  connection.query(sql, [userID, userID, "%"+search+"%", start, limit], (err, results) => {
     if(err) throw err;
 
     callback(results);
@@ -493,7 +575,7 @@ function searchPublicGroups(userID, search, callback, start = 0, limit = 30) {
 function requestMember(userID, groupID, callback) {
   belongsInGroup(userID, groupID, (belongs) => {
     if(belongs) {
-      callback(PRIVATE_GROUP);
+      callback(ALREADY_IN_GROUP);
     } else {
       let sql = `INSERT INTO members (user, chat) values(?, ?);`;
 
@@ -506,17 +588,19 @@ function requestMember(userID, groupID, callback) {
   });
 }
 
-function addIntoGroup(userID, groupID) {
+function addIntoGroup(userID, groupID, callback) {
   let sql = `INSERT INTO members (user, chat) values(?, ?);`;
 
   connection.query(sql, [userID, groupID], (err, results) => {
     if(err) throw err;
+    
+    callback();
   });
 }
 
-function printChatHistory(socket, chatID, start = 0, limit = 100) {
+function printChatHistory(chatID, callback, start = 0, limit = 100) {
   let sql = `
-  SELECT messages.id, messages.content_type, messages.content, UNIX_TIMESTAMP(messages.timestamp) AS timestamp, users.name 
+  SELECT messages.id, messages.content_type AS type, messages.content, UNIX_TIMESTAMP(messages.timestamp) AS timestamp, users.name AS sender, messages.sender AS senderID
   FROM messages 
   INNER JOIN users 
   ON messages.sender=users.id 
@@ -526,17 +610,7 @@ function printChatHistory(socket, chatID, start = 0, limit = 100) {
   connection.query(sql, [chatID, start, limit], (err, results) => {
     if(err) throw err;
 
-    results.reverse();
-    
-    results.forEach((message) => {
-      socket.emit('chat message', {
-        "id": message["id"],
-        "content_type": message["content_type"],
-        "content": message["content"],
-        "timestamp": message["timestamp"],
-        "sender": message["name"]
-      });
-    });
+    callback(results);
   });
 }
 
@@ -545,10 +619,10 @@ function printChatHistory(socket, chatID, start = 0, limit = 100) {
 // # EVENT HANDLING                  #
 // ###################################
 
-function broadcastMessage(senderID, chatID, content) {
-  sendMessage(senderID, chatID, content, (data) => {
-    let name = "group"+chatID;
-    io.to(name).emit('chat message', data);
+function broadcastMessage(senderID, chatID, content, content_type) {
+  sendMessage(senderID, chatID, content, content_type, (data) => {
+    let name = "chat"+chatID;
+    io.to(name).emit('messages', data);
   });
 }
 
@@ -564,13 +638,13 @@ io.on('connection', function(socket){
   let currentRoom = null;
   let chatID = 0;
 
-  socket.on('logIn', (data) => {
-    if(!data) return;
+  // If user changes chat, the first messages that will be sent will overwrite last messages but 
+  // the following messages will be appended
+  let appendMessages = false;
 
-    if(!("username" in data) || !("password" in data)) {
-      socket.emit('loggedIn', {
-        "message": "Missing information"
-      });
+  socket.on('logIn', (data) => {
+    if(!typeCheck('{ username: ValidString, password: ValidString }', data, options)) {
+      return;
     }
 
     if(loggedIn) {
@@ -600,13 +674,18 @@ io.on('connection', function(socket){
         userID = id;
 
         socket.emit('loggedIn', {
-          "nickname": nickname
+          "nickname": nickname,
+          "userID": userID
         });
       })
     });
   });
 
   socket.on('logOut', () => {
+    if(!loggedIn) {
+      return;
+    }
+
     socket.emit('loggedOut');
 
     loggedIn = false;
@@ -625,9 +704,15 @@ io.on('connection', function(socket){
   });
 
   socket.on('groupsFeed', (data) => {
-    if(!data) return;
+    if(!loggedIn) {
+      return;
+    }
 
-    if("oldestTimestamp" in data) {
+    if(data && "oldestTimestamp" in data) {
+      if(!typeCheck('{ oldestTimestamp: Number }', data)) {
+        return;
+      }
+      
       getGroupsFeed(userID, (groups) => {
         socket.emit('groupsFeed', {
           "append": false,
@@ -647,9 +732,15 @@ io.on('connection', function(socket){
   });
 
   socket.on('invitationsFeed', (data) => {
-    if(!data) return;
+    if(!loggedIn) {
+      return;
+    }
 
-    if("oldestTimestamp" in data) {
+    if(data && "oldestTimestamp" in data) {
+      if(!typeCheck('{ oldestTimestamp: Number }', data)) {
+        return;
+      }
+      
       getInvitations((invitations) => {
         socket.emit('invitationsFeed', {
           "append": false,
@@ -669,9 +760,15 @@ io.on('connection', function(socket){
   });
 
   socket.on('discoverGroups', (data) => {
-    if(!data) return;
+    if(!loggedIn) {
+      return;
+    }
 
-    if("oldestTimestamp" in data) {
+    if(data && "oldestTimestamp" in data) {
+      if(!typeCheck('{ oldestTimestamp: Number }', data)) {
+        return;
+      }
+      
       listPublicGroups(userID, (discoverGroupsResults) => {
         socket.emit('discoverGroupsResultsFeed', {
           "append": false,
@@ -689,9 +786,13 @@ io.on('connection', function(socket){
   });
 
   socket.on('discoverGroupsSearch', (data) => {
-    if(!data) return;
-
-    if(!"search" in data) return;
+    if(!loggedIn) {
+      return;
+    }
+    
+    if(!typeCheck('{ search: String } | { oldestTimestamp: Number, search: String }', data)) {
+      return;
+    }
 
     if("oldestTimestamp" in data) {
       searchPublicGroups(userID, data["search"], (data) => {
@@ -711,9 +812,13 @@ io.on('connection', function(socket){
   });
 
   socket.on('discoverGroupsJoin', (data) => {
-    if(!data) return;
-
-    if(!"chatID" in data) return;
+    if(!loggedIn) {
+      return;
+    }
+    
+    if(!typeCheck('{ chatID: Number }', data)) {
+      return;
+    }
 
     requestMember(userID, data["chatID"], (response) => {
       if(response == DISCOVER_BECAME_MEMBER) {
@@ -724,7 +829,7 @@ io.on('connection', function(socket){
         getGroupsFeedEntry(data["chatID"], (groups) => {
           socket.emit('groupsFeed', {
             "append": true,
-            "groups": groups
+            "groups": [groups]
           });
         });
       }
@@ -732,9 +837,14 @@ io.on('connection', function(socket){
   });
 
   socket.on('createGroupCheck', (data) => {
-    if(!data) return;
-
-    if(!("name" in data) || data["name"].length == 0) return;
+    if(!loggedIn) {
+      return;
+    }
+    
+    
+    if(!typeCheck('{ name: ValidString }', data, options)) {
+      return;
+    }
 
     isGroupNameTaken(data["name"], (isTaken) => {
       socket.emit('createGroupCheck', {
@@ -744,12 +854,19 @@ io.on('connection', function(socket){
   });
 
   socket.on('createGroup', (data) => {
-    if(!data) return;
+    if(!loggedIn) {
+      return;
+    }
+    
+    
+    if(!typeCheck('{ name: ValidString, isPublic: Boolean, requestToJoin: Boolean }', data, options)) {
+      return;
+    }
 
-    if(!("name" in data) || !("isPublic" in data) || !("requestToJoin" in data) || (data["name"].length < 1)) return;
-
-    createGroup(data["name"], userID, data["isPublic"], data["requestToJoin"], () => {
-      socket.emit('createGroup');
+    createGroup(data["name"], userID, data["isPublic"], data["requestToJoin"], (newChatID) => {
+      addIntoGroup(userID, newChatID, () => {
+        socket.emit('createGroup');
+      });
     });
   });
 
@@ -760,10 +877,10 @@ io.on('connection', function(socket){
       });
       return;
     }
-
-    if(!data) return;
-
-    if(!("username" in data) || !("password" in data)) return;
+    
+    if(!typeCheck('{ username: ValidString, password: ValidString }', data, options)) {
+      return;
+    }
 
     userExists(data["username"], (id) => {
       if(id != 0) {
@@ -784,6 +901,99 @@ io.on('connection', function(socket){
       });
     });
   });
+
+  socket.on('chat', (data) => {
+    if(!loggedIn) {
+      return;
+    }
+    
+    if(!typeCheck('{ chatID: Number }', data, options)) {
+      return;
+    }
+
+    if(chatID == data["chatID"]) return;
+
+    appendMessages = false;
+
+    chatID = data["chatID"];
+    if(data["chatID"] == 0) {
+      if(currentRoom != null) {
+        socket.leave(currentRoom);
+        socket.emit('chat', {
+          "leave": true
+        });
+      }
+    } else {
+      getGroupName(data["chatID"], (name) => {
+        if(name != null) {
+          if(currentRoom != null) socket.leave(currentRoom);
+          currentRoom = "chat" + data["chatID"];
+          socket.join(currentRoom);
+          
+          socket.emit('chat', {
+            "chatID": data["chatID"],
+            "name": name
+          });
+          
+          console.log(`user ${nickname} joined ${name}`);
+        }
+      });
+    }
+  });
+
+  socket.on('messages', (data) => {
+    if(!loggedIn) {
+      return;
+    }
+    
+    if(!data) {
+      printChatHistory(chatID, (results) => {
+        socket.emit('messages', {
+          "append": appendMessages,
+          "messages": results
+        });
+
+        appendMessages = true;
+      });
+    } else {
+      
+      if(!typeCheck('{ start: Number, limit: Number }', data, options)) {
+        return;
+      }
+      
+      if(data["start"] < 0) return;
+      if(data["limit"] < 1) return;
+
+      printChatHistory(chatID, (results) => {
+        socket.emit('messages', {
+          "append": appendMessages,
+          "messages": results
+        });
+
+        appendMessages = true;
+      }, data["start"], data["limit"]);
+    }
+
+  });
+
+  socket.on('message', (data) => {
+      if(!loggedIn) {
+        return;
+      }
+      
+      if(!typeCheck('{ content_type: Number, content: ValidString }', data, options)) {
+        return;
+      }
+
+      sendMessage(userID, chatID, data["content"], data["content_type"], (data) => {
+        let name = "chat"+chatID;
+        io.to(name).emit('messages', {
+          "append": appendMessages,
+          "messages": [data]
+        });
+        appendMessages = true;
+      });
+    });
 });
 
 

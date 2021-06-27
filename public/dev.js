@@ -1,11 +1,12 @@
 /* eslint-disable */
 var socket = io.connect('https://rainisr.ee', { path: '/rrchat/socket.io' });
-
+let appInside = null;
 const app = Vue.createApp({
     data() {
         return {
             // User information
             username: '-',
+            userID: 0,
             loggedIn: false,
 
             // State
@@ -17,13 +18,13 @@ const app = Vue.createApp({
             groupsNewestTimestamp: 0,
             groupsOldestTimestamp: 0,
             groups: [
-                // id, name, message,                 
+                // { id, name, message } ..               
             ],
 
             invitationsNewestTimestamp: 0,
             invitationsOldestTimestamp: 0,
             invitations: [
-                // id, inviter, group
+                // { id, inviter, group } ..
             ],
 
             discoverGroupsResultsNewestTimestamp: 0,
@@ -31,7 +32,7 @@ const app = Vue.createApp({
             discoverGroupsSearchInput: '',
             discoverGroupsSearch: '',
             discoverGroupsResults: [
-                // id, name, isMember, members
+                // { id, name, isMember, members } ..
             ],
 
             // Create a group
@@ -55,8 +56,15 @@ const app = Vue.createApp({
             registerMessage: '',
 
             // chat
-            showChat: true,
+            showChat: false,
+            showChatID: 0,
             showChatName: 'Group 1',
+            message: '',
+            messagesNewestTimestamp: 0,
+            messagesOldestTimestamp: 0,
+            messages: [
+                // { id, type, content, timestamp, sender, senderID } ..
+            ],
 
             // GUI
             showDiscoverGroups: false
@@ -121,6 +129,19 @@ const app = Vue.createApp({
                 this.createGroupRequestToJoin
             );
         },
+        
+        gui_enterChat(id) {
+            if(this.showChatID == id) {
+                this.showChat = true;
+                return;
+            }
+            this.request_enterChat(id);
+        },
+        
+        gui_message() {
+           this.request_message(0, this.message);
+           this.message = '';
+        },
 
         // ### CLIENT ACTIONS ###
 
@@ -130,6 +151,7 @@ const app = Vue.createApp({
                 "password": password
             });
         },
+        
         request_logOut() {
             socket.emit('logOut');
         },
@@ -162,6 +184,16 @@ const app = Vue.createApp({
                     "oldestTimestamp": oldestTimestamp
                 });
             }
+        },
+
+        request_messages(start) {
+            socket.emit('messages');
+        },
+
+        request_chat(chatID) {
+            socket.emit('chat', {
+                "chatID": chatID
+            });
         },
 
         request_discoverGroupsSearch(search, oldestTimestamp = 0) {
@@ -203,13 +235,34 @@ const app = Vue.createApp({
                 "password": password
             });
         },
+        
+        request_enterChat(id) {
+            socket.emit('chat', {
+                "chatID": id
+            });
+        },
+        
+        request_messages(start = 0, limit = 100) {
+            socket.emit('messages', {
+                "start": start,
+                "limit": limit
+            });
+        },
+        
+        request_message(content_type, content) {
+            socket.emit('message', {
+                "content_type": content_type,
+                "content": content
+            });
+        },
 
 
         // ### SERVER RESPONSES ###
 
         response_loggedIn(data) {
-            if("nickname" in data) {
+            if("nickname" in data && "userID" in data) {
                 this.username = data["nickname"];
+                this.userID = data["userID"];
                 this.loggedIn = true;
                 this.waitingToBeLoggedIn = false;
 
@@ -278,23 +331,23 @@ const app = Vue.createApp({
             if(data["append"] == true) {
                 data["groups"].forEach(group => {
                     if("timestamp" in group) {
-                        if(group["timestamp"] < groupsOldestTimestamp) {
+                        if(group["timestamp"] < this.groupsOldestTimestamp) {
 
                             // If this group is the oldest one, add it to the end
-                            groups.push(group);
-                            groupsOldestTimestamp = group["timestamp"];
-                        } else if(group["timestamp"] > groupsNewestTimestamp) {
+                            this.groups.push(group);
+                            this.groupsOldestTimestamp = group["timestamp"];
+                        } else if(group["timestamp"] > this.groupsNewestTimestamp) {
 
-                            // If this group is the newestone, add it to the beginning
-                            groups.unshift(group);
-                            groupsNewestTimestamp = group["timestamp"];
+                            // If this group is the newest one, add it to the beginning
+                            this.groups.unshift(group);
+                            this.groupsNewestTimestamp = group["timestamp"];
                         } else {
 
                             // If this group is somewhere between, find the right spot
-                            let numgroups = groups.length;
+                            let numgroups = this.groups.length;
                             for(let i = 0; i < numgroups; i++) {
-                                if(group["timestamp"] < groups[i]["timestamp"]) {
-                                    groups.splice(i, 0, group);
+                                if(group["timestamp"] < this.groups[i]["timestamp"]) {
+                                    this.groups.splice(i, 0, group);
                                     break;
                                 }
                             }
@@ -323,23 +376,23 @@ const app = Vue.createApp({
             if(data["append"] == true) {
                 data["discoverGroupsResults"].forEach(discoverGroupsResult => {
                     if("timestamp" in discoverGroupsResult) {
-                        if(discoverGroupsResult["timestamp"] < discoverGroupsResultsOldestTimestamp) {
+                        if(discoverGroupsResult["timestamp"] < this.discoverGroupsResultsOldestTimestamp) {
 
                             // If this discoverGroupsResult is the oldest one, add it to the end
-                            discoverGroupsResults.push(discoverGroupsResult);
-                            discoverGroupsResultsOldestTimestamp = discoverGroupsResult["timestamp"];
+                            this.discoverGroupsResults.push(discoverGroupsResult);
+                            this.discoverGroupsResultsOldestTimestamp = discoverGroupsResult["timestamp"];
                         } else if(discoverGroupsResult["timestamp"] > discoverGroupsResultsNewestTimestamp) {
 
-                            // If this discoverGroupsResult is the newestone, add it to the beginning
-                            discoverGroupsResults.unshift(discoverGroupsResult);
-                            discoverGroupsResultsNewestTimestamp = discoverGroupsResult["timestamp"];
+                            // If this discoverGroupsResult is the newest one, add it to the beginning
+                            this.discoverGroupsResults.unshift(discoverGroupsResult);
+                            this.discoverGroupsResultsNewestTimestamp = discoverGroupsResult["timestamp"];
                         } else {
 
                             // If this discoverGroupsResult is somewhere between, find the right spot
-                            let numdiscoverGroupsResults = discoverGroupsResults.length;
-                            for(let i = 0; i < numdiscoverGroupsResults; i++) {
-                                if(discoverGroupsResult["timestamp"] < discoverGroupsResults[i]["timestamp"]) {
-                                    discoverGroupsResults.splice(i, 0, discoverGroupsResult);
+                            let numdiscoverGroupsResults = this.discoverGroupsResults.length;
+                            for(let i = 0; i < this.numdiscoverGroupsResults; i++) {
+                                if(discoverGroupsResult["timestamp"] < this.discoverGroupsResults[i]["timestamp"]) {
+                                    this.discoverGroupsResults.splice(i, 0, discoverGroupsResult);
                                     break;
                                 }
                             }
@@ -359,6 +412,52 @@ const app = Vue.createApp({
                     this.discoverGroupsResultsNewestTimestamp = Math.max(
                         this.discoverGroupsResultsNewestTimestamp,
                         discoverGroupsResult["timestamp"]
+                    );
+                });
+            }
+        },
+
+        response_messages(data) {
+            console.log("messages received");
+            if(data["append"] == true) {
+                data["messages"].forEach(message => {
+                    if("timestamp" in message) {
+                        if(message["timestamp"] < this.messagesOldestTimestamp) {
+
+                            // If this message is the oldest one, add it to the end
+                            this.messages.push(message);
+                            this.messagesOldestTimestamp = message["timestamp"];
+                        } else if(message["timestamp"] > this.messagesNewestTimestamp) {
+
+                            // If this message is the newest one, add it to the beginning
+                            this.messages.unshift(message);
+                            this.messagesNewestTimestamp = message["timestamp"];
+                        } else {
+
+                            // If this message is somewhere between, find the right spot
+                            let nummessages = this.messages.length;
+                            for(let i = 0; i < nummessages; i++) {
+                                if(message["timestamp"] < this.messages[i]["timestamp"]) {
+                                    this.messages.splice(i, 0, message);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                });
+            } else if(data["append"] == false) {
+                this.messages = data["messages"];
+                this.messages.sort((messageA, messageB) => {
+                    messageA["timestamp"] - messageB["timestamp"];
+                });
+                this.messages.forEach(message => {
+                    this.messagesOldestTimestamp = Math.min(
+                        this.messagesOldestTimestamp,
+                        message["timestamp"]
+                    );
+                    this.messagesNewestTimestamp = Math.max(
+                        this.messagesNewestTimestamp,
+                        message["timestamp"]
                     );
                 });
             }
@@ -398,6 +497,24 @@ const app = Vue.createApp({
                 this.waitingToBeLoggedIn = false;
                 this.registerMessage = data["message"];
             }
+        },
+        
+        response_enterChat(data) {
+            if("leave" in data && data["leave"] == true) {
+                this.showChat = false;
+                this.showChatID = 0;
+                this.showChatName = '';
+                this.messages = [];
+            } else {
+                if(!("chatID" in data) || !("name" in data)) return;
+                
+                this.showChat = true;
+                this.showChatID = data["chatID"];
+                this.showChatName = data["name"];
+                this.messages = [];
+                
+                this.request_messages(0);
+            }
         }
     },
 
@@ -420,6 +537,9 @@ const app = Vue.createApp({
         socket.on('discoverGroupsJoin', (data) => {
             this.response_discoverGroupsJoin(data);
         });
+        socket.on('messages', (data) => {
+            this.response_messages(data);
+        });
         socket.on('createGroupCheck', (data) => {
             this.response_createGroupCheck(data);
         });
@@ -429,6 +549,11 @@ const app = Vue.createApp({
         socket.on('register', (data) => {
             this.response_register(data);
         });
+        socket.on('chat', (data) => {
+            this.response_enterChat(data);
+        });
+        
+        appInside = this;
     }
 });
 
