@@ -561,7 +561,7 @@ function searchPublicGroups(userID, search, callback, start = 0, limit = 30) {
     WHERE chats.public=TRUE AND name LIKE ? AND chats.created > ? ORDER BY chats.created DESC LIMIT ?;
   `;
   
-  // Don't allow underscores nor question marks
+  // Escape underscores and question marks
   search = search.replace('_', "\\_").replace('%', "\\%");
 
   connection.query(sql, [userID, userID, "%"+search+"%", start, limit], (err, results) => {
