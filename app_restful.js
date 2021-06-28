@@ -45,13 +45,17 @@ const GROUP_NAME_TAKEN = 212;
 // ##############################
 
 const typeCheck = require("type-check").typeCheck;
-const express = require('express');
 
-const { groupEnd } = require('console');
+const crypto = require("crypto");
+const { promisify } = require('util');
+const randomBytesAsync = promisify(require('crypto').randomBytes);
+
+const express = require('express');
+const redis = require("redis");
+const mysql  = require('mysql');
+
 const fs = require('fs');
 const path = require('path');
-
-const mysql  = require('mysql');
 
 // ##############################
 // # DATABASE AUTHENTICATION    #
@@ -64,17 +68,25 @@ let databasePass = fs.readFileSync(databasePasswordPath, {encoding: 'utf8'});
 // # SOCKETS                    #
 // ##############################
 
-var app = express();
-var http = require('http').Server(app);
-var io = require('socket.io')(http, { path: '/rrchat/socket.io', origins: '*:*' });
-var port = process.env.PORT || 3789; //production: 3802
+// Express.js
 
+let app = express();
+let http = require('http').Server(app);
+let port = process.env.PORT || 3789; //production: 3802
+
+app.use(express.json());
 
 app.get(prefix, function(req, res) {
 	res.sendFile(__dirname + '/views/restful.html')
 })
 
 app.use(prefix + '/public', express.static('./public'));
+
+// Socket.io
+
+let io = require('socket.io')(http, { path: '/rrchat/socket.io', origins: '*:*' });
+
+// MySQL
 
 let connection = mysql.createConnection({
     host: 'localhost',
@@ -83,7 +95,77 @@ let connection = mysql.createConnection({
     database: 'chat'
 });
 
+// Redis
 
+const client = redis.createClient();
+
+client.on("error", function(error) {
+  console.error(error);
+});
+
+// #####################################
+// # REDIS FUNCTIONS                   #
+// #####################################
+
+/**
+    callbacks:
+    @param {Function} callback(token)   Called after a successful execution. 
+                                        64 characters long token will be passed into the callback.
+    @param {Function} onErr             Called after a failed execution.
+    
+    Result of this function is usually passed into storeAccessToken(..).
+*/
+function generateAccessToken(callback, onErr = null) {
+    crypto.randomBytes(32, function(err, buffer) {
+        if(err) {
+            onErr && onErr();
+            return;
+        }
+        
+        callback(buffer.toString('hex'));
+    });
+}
+
+/**
+    data:
+    @param {String} username    Username to which given access token will be assigned to.
+    @param {String} token       Access token which will be assiged to given user.
+                                This token is usually generated using generateAccessToken().
+    callbacks:
+    @param {Function} callback(result)  Will be called after a successful query.
+
+    Assigns given access token to given user. 
+    Access tokens are stored in local Redis server.
+*/
+function storeAccessToken(token, userID, callback, onErr = null) {
+    client.set(token, userID, (err, result) => {
+        if(err) {
+            onErr && onErr();
+            return;
+        }
+        
+        callback(result);
+    });
+}
+
+/**
+    data:
+    @param {String} token   Access token which will be assiged to given user
+                            This token is must be already stored using storeAccessToken(..)
+    callbacks:
+    @param {Function} callback(result)  Will be called after a successful query
+    
+    Assigns given access token to given user. 
+    Access tokens are stored in local Redis server.
+    
+    Callback's parameter 'result' is the userID corresponding to this access token.
+*/
+function checkAccessToken(token, callback, onErr = null) {
+    client.get(token, (err, result) => {
+        if(err) onErr && onErr();
+        else    callback(result);
+    });
+}
 
 // #####################################
 // # DATABASE ACCESS                   #
@@ -271,6 +353,59 @@ function members(chatID, after, before, limit, callback, onError = null) {
     });
 }
 
+/**
+    @param {String} username            Username of user whose userID is needed.
+    @param {Function} callback(userID)  Called after a successful query.
+    
+    Mostly used at login.
+    Can be used to check if user exists.
+*/
+function getUserID(username, callback) {
+    let sql = `
+        SELECT id
+        FROM users
+        WHERE name=?;
+    `;
+    
+    connection.query(sql, [username], (err, results) => {
+        if(err) {
+            console.log("#############################");
+            console.log("Failed query: ", this.sql);
+            console.log("Error message: ", err);
+            onError && onError("Query failed");
+            return;
+        }
+        
+        callback(results[0] && results[0]["id"]);
+    });
+}
+
+/**
+    @param {String} username                ID of user whose password needs to be checked.
+    @param {String} password                Password which needs to be checked.
+    @param {Function} callback(matches)     Called after a successful query.
+    
+    Used to check if given password belongs to given user.
+*/
+function checkPassword(userID, password, callback) {
+    let sql = `
+        SELECT id
+        FROM users
+        WHERE id=? AND pass=AES_ENCRYPT(name, ?);
+    `;
+    
+    connection.query(sql, [userID, password], (err, results) => {
+        if(err) {
+            console.log("#############################");
+            console.log("Failed query: ", this.sql);
+            console.log("Error message: ", err);
+            onError && onError("Query failed");
+            return;
+        }
+        
+        callback(results[0] && results[0]["id"] > 0);
+    });
+}
 
 // #####################################
 // # UTILITY FUNCTIONS                 #
@@ -278,7 +413,7 @@ function members(chatID, after, before, limit, callback, onError = null) {
 
 /**
     @param {String} string  String containing an positiv or negative integer
-    @returns String converted to positive or negative <integer> or <undefined> if not possible
+    @returns {Number}       String converted to positive or negative <integer> or <undefined> if not possible
 */
 function stringToInteger(string) {
     if (typeof string === 'string')
@@ -287,7 +422,7 @@ function stringToInteger(string) {
 
 /**
     @param {String} string  String containing an positiv integer
-    @returns String converted to positive <integer> or <undefined> if not possible
+    @returns {Number}       String converted to positive <integer> or <undefined> if not possible
 */
 function stringToUInteger(string) {
     if (typeof string === 'string')
@@ -304,9 +439,9 @@ function stringToUInteger(string) {
     @param  {Function} ifParameterBreaksRules   Called if parameter breaks rules set in template 
                                                 (above maximum, below minimum etc)
     
-    @return {Object}            Returns object containing initialized parameters 
-                                or null if any given parameter isn't mentioned in
-                                the template
+    @return {Object}    Returns object containing initialized parameters 
+                        or null if any given parameter isn't mentioned in
+                        the template
     
     This function is used to easily initialize uninitialized URL parameters stored as strings.
     
@@ -428,6 +563,78 @@ function initializeParameters(template, data, ifUnknownParameter, ifParameterInv
 // #####################################
 // # REST API METHODS                  #
 // #####################################
+
+app.post(prefix + '/api/login', (req, res) => {
+    
+    console.log(req.body);
+    
+    let username = req.body["username"];
+    let password = req.body["password"];
+    
+    if(!(typeof username === 'string' || username instanceof String)) {
+        res.status(400).send({message: "'username' is not a string"});
+        return;
+    }
+    
+    if(username.length == 0) {
+        res.status(400).send({message: "'username' is empty"});
+    }
+    
+    if(!(typeof password === 'string' || password instanceof String)) {
+        res.status(400).send({message: "'password' is not a string"});
+        return;
+    }
+    
+    if(password.length == 0) {
+        res.status(400).send({message: "'password' is empty"});
+    }
+    
+    // Check if user exists
+    getUserID(username, (userID) => {
+        if(!userID) {
+            res.status(404).send({message: "User with this username doesn't exist"});
+            return;
+        }
+        
+        // User exists, now check if paassword matches
+        checkPassword(userID, password, (matches) => {
+            if(!matches) {
+                res.status(403).send({message: "Incorrect password"});
+                return;
+            }
+            
+            // Password matches, now check generate & store a new access token
+            generateAccessToken(
+                // callback(token):
+                (token) => {
+                    storeAccessToken(
+                        
+                        // Data
+                        token, 
+                        userID, 
+                        
+                        // Access token stored
+                        () => {
+                            res.setHeader("Content-Type", "application/json");
+                            res.status(200);
+                            res.json({token: token, userID: userID});
+                        },
+                        
+                        // on error
+                        () => {
+                            res.status(500).send({message: "Failed to store the access token"});
+                        }
+                    );
+                },
+                
+                // on error:
+                () => {
+                    res.status(500).send({message: "Failed to generate an access token"});
+                }
+            );
+        });
+    });
+});
 
 /*
     Responds to:
