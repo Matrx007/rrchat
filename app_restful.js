@@ -281,6 +281,9 @@ function isChatPublic(chatID, callback, onError = null) {
 
 /**
     @param  {Number} chatID         ID of the chat
+    @param  {Number} after          Only select entries after this timestamp
+    @param  {Number} before         Only select entries before this timestamp
+    @param  {Number} limit          Only select first this many entries
     @param  {Function} callback     Called after a successful SQL query
     @param  {Function} onError(msg) Called after a failed SQL query
     
@@ -311,7 +314,7 @@ function members(chatID, after, before, limit, callback, onError = null) {
         WHERE chat=? 
             AND UNIX_TIMESTAMP(joined) > ?
             AND UNIX_TIMESTAMP(joined) < ? 
-        ORDER BY joined ASC 
+        ORDER BY joined DESC 
         LIMIT ?;
     `;
 
@@ -356,11 +359,12 @@ function members(chatID, after, before, limit, callback, onError = null) {
 /**
     @param {String} username            Username of user whose userID is needed.
     @param {Function} callback(userID)  Called after a successful query.
+    @param  {Function} onError(msg)     Called after a failed SQL query
     
     Mostly used at login.
     Can be used to check if user exists.
 */
-function getUserID(username, callback) {
+function getUserID(username, callback, onError = null) {
     let sql = `
         SELECT id
         FROM users
@@ -384,10 +388,11 @@ function getUserID(username, callback) {
     @param {String} username                ID of user whose password needs to be checked.
     @param {String} password                Password which needs to be checked.
     @param {Function} callback(matches)     Called after a successful query.
+    @param  {Function} onError(msg)         Called after a failed SQL query
     
     Used to check if given password belongs to given user.
 */
-function checkPassword(userID, password, callback) {
+function checkPassword(userID, password, callback, onError = null) {
     let sql = `
         SELECT id
         FROM users
@@ -404,6 +409,212 @@ function checkPassword(userID, password, callback) {
         }
         
         callback(results[0] && results[0]["id"] > 0);
+    });
+}
+
+/**
+    @param {String} username            Username of new user.
+    @param {String} password            Password of new user.
+    @param {Function} callback(userID)  Called after a successful query.
+    @param  {Function} onError(msg)     Called after a failed SQL query
+    
+    Used only in POST /api/register.
+*/
+function createUser(username, password, callback, onError = null) {
+    let sql = `
+        INSERT INTO users(name, pass) VALUES(?, AES_ENCRYPT(?, ?));
+    `;
+    
+    connection.query(sql, [username, username, password], (err, results) => {
+        if(err) {
+            console.log("#############################");
+            console.log("Failed query: ", this.sql);
+            console.log("Error message: ", err);
+            onError && onError("Query failed");
+            return;
+        }
+        
+        callback(results.insertId);
+    });
+}
+
+
+/**
+    @param  {Number} userID         ID of the user
+    @param  {Number} after          Only select entries after this timestamp
+    @param  {Number} before         Only select entries before this timestamp
+    @param  {Number} limit          Only select first this many entries
+    @param  {Function} callback     Called after a successful SQL query
+    @param  {Function} onError(msg) Called after a failed SQL query
+    
+    Lists chats where given user belongs to.
+    
+    Passed to callback: 
+    [
+        {
+            "id": <CHAT ID>,
+            "name": <CHAT NAME>,
+            "admin": <CHAT ADMIN>,
+            "public": <IS PUBLIC>,
+            "requestToJoin": <IS REQUEST TO JOIN>,
+            "created": <CREATED TIMESTAMP>
+        },
+        ..
+    ]
+*/
+function getUserChats(userID, after, before, limit, callback, onError = null) {
+    let sql = `
+        SELECT line.*
+        FROM members 
+        INNER JOIN (
+            SELECT id, name, admin, public, requestTojoin, UNIX_TIMESTAMP(created) AS created
+            FROM chats
+        ) AS line
+        ON line.id=members.chat
+        WHERE members.user=?
+            AND UNIX_TIMESTAMP(members.joined) > ?
+            AND UNIX_TIMESTAMP(members.joined) < ? 
+        ORDER BY members.joined DESC
+        LIMIT ?;
+    `;
+    
+    connection.query(sql, [userID, after, before, limit], (err, results) => {
+        if(err) {
+            console.log("#############################");
+            console.log("Failed query: ", this.sql);
+            console.log("Error message: ", err);
+            onError && onError("Query failed");
+            return;
+        }
+        
+        callback(results);
+    });
+}
+
+
+/**
+    @param  {Number} userID         ID of the user
+    @param  {Number} after          Only select entries after this timestamp
+    @param  {Number} before         Only select entries before this timestamp
+    @param  {Number} limit          Only select first this many entries
+    @param  {Function} callback     Called after a successful SQL query
+    @param  {Function} onError(msg) Called after a failed SQL query
+    
+    Lists invitations sent to given user.
+    
+    Passed to callback: 
+    [
+        {
+            "id": <INVITATION ID>,
+            "inviter": <INVITER NAME>,
+            "inviterID": <INVITER ID>,
+            "chat": <CHAT NAME>,
+            "timestamp": <INVITATION TIMESTAMP>
+        },
+        ..
+    ]
+*/
+function getUserInvitations(userID, after, before, limit, callback, onError = null) {
+    let sql = `
+        SELECT invitations.id, userName.name AS inviter, invitations.inviter AS inviterID, chatName.name AS chat, invitations.chat AS chatID,  UNIX_TIMESTAMP(invitations.timestamp) AS timestamp
+        FROM invitations 
+        INNER JOIN (
+            SELECT id, name
+            FROM users
+        ) AS userName
+        ON userName.id=invitations.inviter
+        INNER JOIN (
+            SELECT id, name
+            FROM chats
+        ) AS chatName
+        ON chatName.id=invitations.chat
+        WHERE invitations.invited=?
+            AND UNIX_TIMESTAMP(invitations.timestamp) > ?
+            AND UNIX_TIMESTAMP(invitations.timestamp) < ? 
+        ORDER BY invitations.timestamp DESC
+        LIMIT ?;
+    `;
+    
+    connection.query(sql, [userID, after, before, limit], (err, results) => {
+        if(err) {
+            console.log("#############################");
+            console.log("Failed query: ", this.sql);
+            console.log("Error message: ", err);
+            onError && onError("Query failed");
+            return;
+        }
+        
+        callback(results);
+    });
+}
+
+/**
+    @param  {Number} userID         ID of the user
+    @param  {Number} after          Only select entries after this timestamp
+    @param  {Number} before         Only select entries before this timestamp
+    @param  {Number} limit          Only select first this many entries
+    @param  {Function} callback     Called after a successful SQL query
+    @param  {Function} onError(msg) Called after a failed SQL query
+    
+    Lists requests sent to chats owned by given user.
+    
+    Passed to callback: 
+    [
+        {
+            "id": <REQUEST ID>,
+            "requester": <REQUEST NAME>,
+            "requesterID": <REQUEST ID>,
+            "chat": <CHAT NAME>,
+            "chatID": <CHAT ID>,
+            "timestamp": <REQUEST TIMESTAMP>
+        },
+        ..
+    ]
+*/
+function getUserRequests(userID, after, before, limit, callback, onError = null) {
+    let sql = `
+        SELECT requestsByChat.id, userName.name AS requester, requestsByChat.user AS requesterID, chatName.name as chat, requestsByChat.chat AS chatID, requestsByChat.requested AS timestamp
+        FROM chats
+        
+        # Select requests sent to chats owned by given user
+        RIGHT JOIN (
+            SELECT *
+            FROM requests
+        ) AS requestsByChat
+        ON requestsByChat.chat=chats.id
+        
+        # Find name for requester by requester's id
+        LEFT JOIN (
+            SELECT id, name
+            FROM users
+        ) AS userName
+        ON userName.id=requestsByChat.user
+        
+        # Find name for chat where request was sent
+        LEFT JOIN (
+            SELECT id, name
+            FROM chats
+        ) AS chatName
+        ON chatName.id=requestsByChat.chat
+        
+        # Selection rules
+        WHERE chats.admin=?
+            AND UNIX_TIMESTAMP(requestsByChat.requested) > ?
+            AND UNIX_TIMESTAMP(requestsByChat.requested) < ?
+        ORDER BY requestsByChat.requested DESC
+        LIMIT ?;
+    `;
+    
+    connection.query(sql, [userID, after, before, limit], (err, results) => {
+        if(err) {
+            console.log("#############################");
+            console.log("Failed query: ", this.sql);
+            console.log("Error message: ", err);
+            onError && onError("Query failed");
+            return;
+        }
+        
+        callback(results);
     });
 }
 
@@ -564,6 +775,23 @@ function initializeParameters(template, data, ifUnknownParameter, ifParameterInv
 // # REST API METHODS                  #
 // #####################################
 
+
+/*
+    Responds to:
+    POST /rrchat/api/login
+    
+    Request:
+    {
+        "username": <USERNAME>,
+        "password": <PASSWORD>
+    }
+    
+    Response:
+    {
+        "token": <ACCESS TOKEN>, 
+        "userID": <USER ID>
+    }
+*/
 app.post(prefix + '/api/login', (req, res) => {
     
     console.log(req.body);
@@ -604,6 +832,93 @@ app.post(prefix + '/api/login', (req, res) => {
             }
             
             // Password matches, now check generate & store a new access token
+            generateAccessToken(
+                // callback(token):
+                (token) => {
+                    storeAccessToken(
+                        
+                        // Data
+                        token, 
+                        userID, 
+                        
+                        // Access token stored
+                        () => {
+                            res.setHeader("Content-Type", "application/json");
+                            res.status(200);
+                            res.json({token: token, userID: userID});
+                        },
+                        
+                        // on error
+                        () => {
+                            res.status(500).send({message: "Failed to store the access token"});
+                        }
+                    );
+                },
+                
+                // on error:
+                () => {
+                    res.status(500).send({message: "Failed to generate an access token"});
+                }
+            );
+        });
+    });
+});
+
+/*
+    Responds to:
+    POST /rrchat/api/register
+    
+    Request:
+    {
+        "username": <USERNAME>,
+        "password": <PASSWORD>
+    }
+    
+    Response:
+    {
+        "token": <ACCESS TOKEN>, 
+        "userID": <USER ID>
+    }
+*/
+app.post(prefix + '/api/register', (req, res) => {
+    
+    console.log(req.body);
+    
+    let username = req.body["username"];
+    let password = req.body["password"];
+    
+    if(!(typeof username === 'string' || username instanceof String)) {
+        res.status(400).send({message: "'username' is not a string"});
+        return;
+    }
+    
+    if(username.length == 0) {
+        res.status(400).send({message: "'username' is empty"});
+    }
+    
+    if(!(typeof password === 'string' || password instanceof String)) {
+        res.status(400).send({message: "'password' is not a string"});
+        return;
+    }
+    
+    if(password.length == 0) {
+        res.status(400).send({message: "'password' is empty"});
+    }
+    
+    // Check if user exists
+    getUserID(username, (userIDCheck) => {
+        if(userIDCheck) {
+            res.status(404).send({message: "Username is already taken"});
+            return;
+        }
+        
+        createUser(username, password, (userID) => {
+            if(!userID) {
+                res.status(500).send({message: "Failed to register"});
+                return;
+            }
+            
+            // User created, now generate & store a new access token
             generateAccessToken(
                 // callback(token):
                 (token) => {
@@ -729,9 +1044,9 @@ app.get(prefix + '/api/chat/:id/members', (req, res) => {
         return;
     }
     
-    let chatID = stringToInteger(req.params["id"]);
+    let chatID = stringToUInteger(req.params["id"]);
     if(chatID == undefined) {
-        res.status(401).send({message: "Expected URL: /api/chat/<CHAT ID>/members"});
+        res.status(400).send({message: "Expected URL: /api/chat/<CHAT ID>/members"});
         return;
     }    
     
@@ -742,13 +1057,360 @@ app.get(prefix + '/api/chat/:id/members', (req, res) => {
                 res.setHeader("Content-Type", "application/json");
                 res.status(200);
                 res.json(data);
-                
-                console.log("sent: ", data);
             });
         } else {
             res.status(401).send({message: "This chat is private"});
         }
     });
+});
+
+/*
+    Responds to:
+    GET /rrchat/api/user/:id/chats?after=<TIMESTAMP>?before=<BEFORE TIMESTAMP>?limit=<COUNT>
+    
+    Authorization:
+    userID = checkAccessToken(..);
+    if(userID == req.params.id) {
+        <SUCCESS>
+    } else {
+        <FAILURE>
+    }
+    
+    Response:
+    {
+        "chats": [
+            {
+                "id": <CHAT ID>,
+                "name": <CHAT NAME>,
+                "admin": <CHAT ADMIN>,
+                "public": <IS PUBLIC>,
+                "requestToJoin": <IS REQUEST TO JOIN>,
+                "created": <CREATED TIMESTAMP>
+            },
+            ..
+        ]
+    }
+*/
+app.get(prefix + '/api/user/:id/chats', (req, res) => {
+    
+    let accessToken = req.body["token"];
+    
+    // Access toke must be provided
+    if(!accessToken) {
+        res.status(401).send("This action requires authentication");
+        return;
+    }
+    
+    checkAccessToken(
+        accessToken,
+        
+        // callback
+        (userID) => {
+            if(!userID) {
+                res.status(400).send("Invalid access token");
+                return;
+            }
+            
+    
+            let targetUserID = stringToUInteger(req.params["id"]);
+            if(targetUserID == undefined) {
+                res.status(400).send({message: "Expected URL: /api/user/<USER ID>/chats"});
+                return;
+            }    
+            
+            if(userID != targetUserID) {
+                res.status(403).send({message: "You cannot view this person's chats"});
+                return;
+            }
+            
+            // Authorized, continue processing request
+            
+            // Set missing paramaters to their defaults
+            let parameters = initializeParameters(
+                // Template:
+                {
+                    before:     { type: 'StrNum', default: 4294967295,  min: 0, max: 4294967295},
+                    after:      { type: 'StrNum', default: 0,           min: 0, max: 4294967295},
+                    limit:      { type: 'StrNum', default: 30,          min: 1, max: 30}
+                },         
+                // Input data:
+                req.query,
+                // On unknown parameter:
+                (msg) => {res.status(400).send({message: msg});},
+                // On parameter of invalid type:
+                (msg) => {res.status(400).send({message: msg});},
+                // On parameter breaking rules:
+                (msg) => {res.status(400).send({message: msg});}
+            );
+            
+            if(!parameters) {
+                return;
+            }
+            
+            // All conditions passed, run queries
+            getUserChats(
+                // data
+                userID, 
+                parameters["after"], 
+                parameters["before"], 
+                parameters["limit"], 
+                
+                // callback
+                (data) => {
+                    res.setHeader("Content-Type", "application/json");
+                    res.status(200);
+                    res.json({
+                        chats: data
+                    });
+                },
+                
+                // on error
+                (err) => {
+                    res.status(500).send({message: "Failed to get user's chats"});
+                }
+            );
+        },
+        
+        // on error
+        (err) => {
+            res.status(500).send("Failed to check access token");
+            return;
+        }
+    );
+});
+
+/*
+    Responds to:
+    GET /rrchat/api/user/:id/invitations?after=<TIMESTAMP>?before=<BEFORE TIMESTAMP>?limit=<COUNT>
+    
+    Authorization:
+    userID = checkAccessToken(..);
+    if(userID == req.params.id) {
+        <SUCCESS>
+    } else {
+        <FAILURE>
+    }
+    
+    Response:
+    {
+        "invitations": [
+            {
+                "id": <INVITATION ID>,
+                "inviter": <INVITER NAME>,
+                "inviterID": <INVITER ID>,
+                "chat": <CHAT NAME>,
+                "chatID": <CHAT ID>,
+                "timestamp": <INVITATION TIMESTAMP>
+            },
+            ..
+        ]
+    }
+*/
+app.get(prefix + '/api/user/:id/invitations', (req, res) => {
+    
+    let accessToken = req.body["token"];
+    
+    // Access toke must be provided
+    if(!accessToken) {
+        res.status(401).send("This action requires authentication");
+        return;
+    }
+    
+    checkAccessToken(
+        accessToken,
+        
+        // callback
+        (userID) => {
+            if(!userID) {
+                res.status(400).send("Invalid access token");
+                return;
+            }
+            
+    
+            let targetUserID = stringToUInteger(req.params["id"]);
+            if(targetUserID == undefined) {
+                res.status(400).send({message: "Expected URL: /api/user/<USER ID>/invitations"});
+                return;
+            }    
+            
+            if(userID != targetUserID) {
+                res.status(403).send({message: "You cannot view this person's invitations"});
+                return;
+            }
+            
+            // Authorized, continue processing request
+            
+            // Set missing paramaters to their defaults
+            let parameters = initializeParameters(
+                // Template:
+                {
+                    before:     { type: 'StrNum', default: 4294967295,  min: 0, max: 4294967295},
+                    after:      { type: 'StrNum', default: 0,           min: 0, max: 4294967295},
+                    limit:      { type: 'StrNum', default: 30,          min: 1, max: 30}
+                },         
+                // Input data:
+                req.query,
+                // On unknown parameter:
+                (msg) => {res.status(400).send({message: msg});},
+                // On parameter of invalid type:
+                (msg) => {res.status(400).send({message: msg});},
+                // On parameter breaking rules:
+                (msg) => {res.status(400).send({message: msg});}
+            );
+            
+            console.log(parameters);
+            
+            if(!parameters) {
+                return;
+            }
+            
+            // All conditions passed, run queries
+            getUserInvitations(
+                // data
+                userID, 
+                parameters["after"], 
+                parameters["before"], 
+                parameters["limit"], 
+                
+                // callback
+                (data) => {
+                    res.setHeader("Content-Type", "application/json");
+                    res.status(200);
+                    res.json({
+                        invitations: data
+                    });
+                },
+                
+                // on error
+                (err) => {
+                    res.status(500).send({message: "Failed to get user's invitations"});
+                }
+            );
+        },
+        
+        // on error
+        (err) => {
+            res.status(500).send("Failed to check access token");
+            return;
+        }
+    );
+});
+
+/*
+    Responds to:
+    GET /rrchat/api/user/:id/requests?after=<TIMESTAMP>?before=<BEFORE TIMESTAMP>?limit=<COUNT>
+    
+    Authorization:
+    userID = checkAccessToken(..);
+    if(userID == req.params.id) {
+        <SUCCESS>
+    } else {
+        <FAILURE>
+    }
+    
+    Response:
+    {
+        "requests": [
+            {
+                "id": <REQUEST ID>,
+                "requester": <REQUEST NAME>,
+                "requesterID": <REQUEST ID>,
+                "chat": <CHAT NAME>,
+                "chatID": <CHAT ID>,
+                "timestamp": <REQUEST TIMESTAMP>
+            },
+            ..
+        ]
+    }
+*/
+app.get(prefix + '/api/user/:id/requests', (req, res) => {
+    
+    let accessToken = req.body["token"];
+    
+    // Access toke must be provided
+    if(!accessToken) {
+        res.status(401).send("This action requires authentication");
+        return;
+    }
+    
+    checkAccessToken(
+        accessToken,
+        
+        // callback
+        (userID) => {
+            if(!userID) {
+                res.status(400).send("Invalid access token");
+                return;
+            }
+            
+    
+            let targetUserID = stringToUInteger(req.params["id"]);
+            if(targetUserID == undefined) {
+                res.status(400).send({message: "Expected URL: /api/user/<USER ID>/requests"});
+                return;
+            }    
+            
+            if(userID != targetUserID) {
+                res.status(403).send({message: "You cannot view this person's requests"});
+                return;
+            }
+            
+            // Authorized, continue processing request
+            
+            // Set missing paramaters to their defaults
+            let parameters = initializeParameters(
+                // Template:
+                {
+                    before:     { type: 'StrNum', default: 4294967295,  min: 0, max: 4294967295},
+                    after:      { type: 'StrNum', default: 0,           min: 0, max: 4294967295},
+                    limit:      { type: 'StrNum', default: 30,          min: 1, max: 30}
+                },         
+                // Input data:
+                req.query,
+                // On unknown parameter:
+                (msg) => {res.status(400).send({message: msg});},
+                // On parameter of invalid type:
+                (msg) => {res.status(400).send({message: msg});},
+                // On parameter breaking rules:
+                (msg) => {res.status(400).send({message: msg});}
+            );
+            
+            console.log(parameters);
+            
+            if(!parameters) {
+                return;
+            }
+            
+            // All conditions passed, run queries
+            getUserRequests(
+                // data
+                userID, 
+                parameters["after"], 
+                parameters["before"], 
+                parameters["limit"], 
+                
+                // callback
+                (data) => {
+                    res.setHeader("Content-Type", "application/json");
+                    res.status(200);
+                    res.json({
+                        requests: data
+                    });
+                },
+                
+                // on error
+                (err) => {
+                    res.status(500).send({message: "Failed to get user's requests"});
+                }
+            );
+        },
+        
+        // on error
+        (err) => {
+            res.status(500).send("Failed to check access token");
+            return;
+        }
+    );
 });
 
 
