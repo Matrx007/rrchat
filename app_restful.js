@@ -163,7 +163,17 @@ function storeAccessToken(token, userID, callback, onErr = null) {
 function checkAccessToken(token, callback, onErr = null) {
     client.get(token, (err, result) => {
         if(err) onErr && onErr();
-        else    callback(result);
+        else {
+            if(!result) {
+                callback(result);
+            } else {
+                let userID = stringToUInteger(result);
+                if(!userID) {
+                    console.log("Access token's value is of invalid type");
+                    process.exit(1);
+                } else callback(userID);
+            }
+        }
     });
 }
 
@@ -529,6 +539,7 @@ function getUserInvitations(userID, after, before, limit, callback, onError = nu
         ) AS chatName
         ON chatName.id=invitations.chat
         WHERE invitations.invited=?
+            AND invitations.hidden=0
             AND UNIX_TIMESTAMP(invitations.timestamp) > ?
             AND UNIX_TIMESTAMP(invitations.timestamp) < ? 
         ORDER BY invitations.timestamp DESC
@@ -599,6 +610,7 @@ function getUserRequests(userID, after, before, limit, callback, onError = null)
         
         # Selection rules
         WHERE chats.admin=?
+            AND requestsByChat.hidden=0
             AND UNIX_TIMESTAMP(requestsByChat.requested) > ?
             AND UNIX_TIMESTAMP(requestsByChat.requested) < ?
         ORDER BY requestsByChat.requested DESC
@@ -705,6 +717,33 @@ function isMember(chatID, userID, callback, onError = null) {
 }
 
 /**
+    @param  {String} chatName       Name of the chat
+    @param  {Function} callback     Called after a successful SQL query
+    @param  {Function} onError(msg) Called after a failed SQL query
+    
+    Checks if a chat with given name exists.
+    
+    Passed to callback: 
+    true or false
+*/
+function isChatNameTaken(chatName, callback, onError = null) {
+    let sql = `SELECT COUNT(*) AS \`exists\` FROM chats WHERE name=?`;
+
+    // Execute the SQL query
+    connection.query(sql, [chatName], (err, results) => {
+        if(err) {
+            console.log("#############################");
+            console.log("Failed query: ", this.sql);
+            console.log("Error message: ", err);
+            onError && onError("Query failed");
+            return;
+        }
+        
+        callback(results[0]["exists"]);
+    });
+}
+
+/**
     @param  {Number} chatID         ID of the chat
     @param  {Function} callback     Called after a successful SQL query
     @param  {Function} onError(msg) Called after a failed SQL query
@@ -728,6 +767,87 @@ function chatExists(chatID, callback, onError = null) {
         }
         
         callback(results[0]["exists"]);
+    });
+}
+
+/**
+    @param {String} name                Name of the chat
+    @param {Boolean} isPublic           Is the chat public
+    @param {Boolean} isRequestToJoin    Is this chat requestToJoin
+    @param {Number} admin               ID of the creator
+    @param {Function} callback          Called after a successful SQL query
+    @param {Function} onError(msg)      Called after a failed SQL query
+    
+    Creates a new chat.
+    
+    Passed to callback: 
+    Chat ID
+*/
+function createChat(name, isPublic, isRequestToJoin, admin, callback, onError = null) {
+    let sql = `INSERT INTO chats(name, admin, public, requestToJoin) VALUES(?, ?, ?, ?);`;
+
+    // Execute the SQL query
+    connection.query(sql, [name, admin, isPublic, isRequestToJoin], (err, results) => {
+        if(err) {
+            console.log("#############################");
+            console.log("Failed query: ", this.sql);
+            console.log("Error message: ", err);
+            onError && onError("Query failed");
+            return;
+        }
+        
+        callback(results.insertId);
+    });
+}
+
+/**
+    @param {Number} userID          ID of the target user
+    @param {Number} chatID          ID of the target chat
+    @param {Function} callback      Called after a successful SQL query
+    @param {Function} onError(msg)  Called after a failed SQL query
+    
+    Check if given user belongs to or is admin of given chat;
+    
+    Passed to callback: 
+    belongs (Boolean)
+*/
+function belongsToChat(userID, chatID, callback, onError = null) {
+    let sql = `SELECT COUNT(*) AS belongs FROM members WHERE user=? AND chat=?;`;
+
+    // Execute the SQL query
+    connection.query(sql, [userID, chatID], (err, results) => {
+        if(err) {
+            console.log("#############################");
+            console.log("Failed query: ", this.sql);
+            console.log("Error message: ", err);
+            onError && onError("Query failed");
+            return;
+        }
+        
+        let belongs = results[0]["belongs"];
+        
+        if(!belongs) {
+            
+            let sql2 = `SELECT admin FROM chats WHERE id=?;`;
+
+            // Execute the SQL query
+            connection.query(sql, [chatID], (err, results) => {
+                if(err) {
+                    console.log("#############################");
+                    console.log("Failed query: ", this.sql);
+                    console.log("Error message: ", err);
+                    onError && onError("Query failed");
+                    return;
+                }
+                
+                let admin = results[0]["admin"];
+                
+                callback(admin == userID);
+            });
+            
+        } else {
+            callback(results.insertId > 0);
+        }
     });
 }
 
@@ -1210,7 +1330,7 @@ app.get(prefix + '/api/user/:id/chats', (req, res) => {
     
     // Access toke must be provided
     if(!accessToken) {
-        res.status(401).send("This action requires authentication");
+        res.status(401).send({message: "This action requires authentication"});
         return;
     }
     
@@ -1220,7 +1340,7 @@ app.get(prefix + '/api/user/:id/chats', (req, res) => {
         // callback
         (userID) => {
             if(!userID) {
-                res.status(400).send("Invalid access token");
+                res.status(403).send({message: "Invalid access token"});
                 return;
             }
             
@@ -1286,7 +1406,7 @@ app.get(prefix + '/api/user/:id/chats', (req, res) => {
         
         // on error
         (err) => {
-            res.status(500).send("Failed to check access token");
+            res.status(500).send({message: "Failed to check access token"});
             return;
         }
     );
@@ -1325,7 +1445,7 @@ app.get(prefix + '/api/user/:id/invitations', (req, res) => {
     
     // Access toke must be provided
     if(!accessToken) {
-        res.status(401).send("This action requires authentication");
+        res.status(401).send({message: "This action requires authentication"});
         return;
     }
     
@@ -1335,7 +1455,7 @@ app.get(prefix + '/api/user/:id/invitations', (req, res) => {
         // callback
         (userID) => {
             if(!userID) {
-                res.status(400).send("Invalid access token");
+                res.status(403).send({message: "Invalid access token"});
                 return;
             }
             
@@ -1403,7 +1523,7 @@ app.get(prefix + '/api/user/:id/invitations', (req, res) => {
         
         // on error
         (err) => {
-            res.status(500).send("Failed to check access token");
+            res.status(500).send({message: "Failed to check access token"});
             return;
         }
     );
@@ -1442,7 +1562,7 @@ app.get(prefix + '/api/user/:id/requests', (req, res) => {
     
     // Access toke must be provided
     if(!accessToken) {
-        res.status(401).send("This action requires authentication");
+        res.status(401).send({message: "This action requires authentication"});
         return;
     }
     
@@ -1452,7 +1572,7 @@ app.get(prefix + '/api/user/:id/requests', (req, res) => {
         // callback
         (userID) => {
             if(!userID) {
-                res.status(400).send("Invalid access token");
+                res.status(403).send({message: "Invalid access token"});
                 return;
             }
             
@@ -1520,7 +1640,7 @@ app.get(prefix + '/api/user/:id/requests', (req, res) => {
         
         // on error
         (err) => {
-            res.status(500).send("Failed to check access token");
+            res.status(500).send({message: "Failed to check access token"});
             return;
         }
     );
@@ -1641,7 +1761,7 @@ app.get(prefix + '/api/chat/:id', (req, res) => {
                     // callback
                     (userID) => {
                         if(!userID) {
-                            res.status(400).send({message: "Invalid access token"});
+                            res.status(403).send({message: "Invalid access token"});
                             return;
                         }
                         
@@ -1669,6 +1789,118 @@ app.get(prefix + '/api/chat/:id', (req, res) => {
     );
 });
 
+app.post(prefix + '/api/create/chat', (req, res) => {
+    
+    let accessToken = req.body["token"];
+    
+    // Access toke must be provided
+    if(!accessToken) {
+        res.status(401).send({message: "This action requires authentication"});
+        return;
+    }
+    
+    checkAccessToken(
+        accessToken,
+        
+        // callback
+        (userID) => {
+            if(!userID) {
+                res.status(403).send({message: "Invalid access token"});
+                return;
+            }
+            
+            // Guard against missing properties
+            if(!req.body.hasOwnProperty("name")) {
+                res.status(400).send({message: "Missing property in body: 'name'"});
+                return;
+            }
+            if(!req.body.hasOwnProperty("public")) {
+                res.status(400).send({message: "Missing property in body: 'public'"});
+                return;
+            }
+            if(!req.body.hasOwnProperty("requestToJoin")) {
+                res.status(400).send({message: "Missing property in body: 'requestToJoin'"});
+                return;
+            }
+            
+            let name = req.body["name"];
+            let isPublic = req.body["public"];
+            let isRequestToJoin = req.body["requestToJoin"];
+            
+            // Guard against properties of wrong types
+            if(!typeCheck('String', name)) {
+                res.status(400).send({message: "Property 'name' has to be a string"});
+                return;
+            }
+            if(!typeCheck('Boolean', isPublic)) {
+                res.status(400).send({message: "Property 'public' has to be a boolean"});
+                return;
+            }
+            if(!typeCheck('Boolean', isRequestToJoin)) {
+                res.status(400).send({message: "Property 'requestToJoin' has to be a boolean"});
+                return;
+            }
+            
+            // Guard against empty properties
+            if(name.length == 0) {
+                res.status(400).send({message: "Property 'name' is too short"});
+                return;
+            }
+            
+            isChatNameTaken(
+                // data
+                name,
+                
+                // callback
+                (isNameTaken) => {
+                    if(isNameTaken) {
+                        res.status(400).send({message: "This name is already taken"});
+                        return;
+                    }
+                    
+                    createChat(
+                        // data
+                        name,
+                        isPublic,
+                        isRequestToJoin,
+                        userID,
+                        
+                        // callback
+                        (chatID) => {
+                            if(!chatID) {
+                                res.status(400).send({message: "Failed to create a new chat"});
+                                return;
+                            }
+                            
+                            res.setHeader("Content-Type", "application/json");
+                            res.status(200);
+                            res.json({chatID: chatID});
+                        },
+                        
+                        // on error
+                        (err) => {
+                            res.status(400).send({message: "This name is already taken"});
+                            return;
+                        }
+                    );
+                },
+                
+                // on error
+                (err) => {
+                    res.status(500).send({message: "Failed to check name availability"});
+                    return;
+                }
+            );           
+            
+        },
+        
+        // on error
+        (err) => {
+            res.status(500).send({message: "Failed to check access token"});
+            return;
+        }
+    );
+});
 
 // #####################################
 // # START LISTENERS                   #
