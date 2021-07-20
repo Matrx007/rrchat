@@ -301,3 +301,67 @@ module.exports.userChats = function(userID, after, before, limit) {
         });
     });
 }
+
+/**
+    @param  {Number} userID         UserID of target user
+    @param  {Number} after          Only select chats after certain created timestamp
+    @param  {Number} before         Only select chats before certain created timestamp
+    @param  {Number} limit          Only select this number of chats
+    @param  {Function} callback     Called after a successful SQL query
+    @param  {Function} onError(msg) Called after a failed SQL query
+    
+    Lists invitations sent to user.
+    - Allows dynamic loading, using the 'after', 'before' and 'limit' parameters
+    - Sorted by latest
+    
+    Passed to callback: 
+    [
+        {
+            id: Number,
+            inviter: String,
+            inviterID: Number,
+            chat: String,
+            chatID: Number,
+            timestamp: Number
+        }, ..
+    ]
+*/
+module.exports.userInvitations = function(userID, after, before, limit) {
+    return new Promise((resolve, reject) => {
+        let sql = `
+            SELECT invitations.id, nameJoin.name AS inviter, invitations.inviter AS inviterID, chatJoin.name AS chat, invitations.chat AS chatID, UNIX_TIMESTAMP(invitations.timestamp) AS timestamp
+            FROM invitations 
+            LEFT JOIN (
+                SELECT id, name
+                FROM users
+            ) AS nameJoin
+            ON nameJoin.id=invitations.inviter
+            LEFT JOIN (
+                SELECT id, name
+                FROM chats
+            ) AS chatJoin
+            ON chatJoin.id=invitations.chat
+            WHERE 
+                invitations.invitee=? AND 
+                invitations.hidden=0
+            HAVING
+                timestamp>? AND
+                timestamp<?
+            ORDER BY timestamp
+            DESC
+        `;
+        
+        // Execute the SQL query
+        connection.query(sql, [userID, after, before, limit], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to fetch invitations"
+                ));
+            }
+
+            resolve(results);
+        });
+    });
+}

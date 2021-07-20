@@ -537,7 +537,7 @@ function getUserInvitations(userID, after, before, limit, callback, onError = nu
             FROM chats
         ) AS chatName
         ON chatName.id=invitations.chat
-        WHERE invitations.invited=?
+        WHERE invitations.invitee=?
             AND invitations.hidden=0
             AND UNIX_TIMESTAMP(invitations.timestamp) > ?
             AND UNIX_TIMESTAMP(invitations.timestamp) < ? 

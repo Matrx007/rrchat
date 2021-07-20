@@ -292,7 +292,7 @@ function getInvitations(userID, callback) {
     FROM users
   ) AS user
   ON inviter=user.id 
-  WHERE invited=? 
+  WHERE invitee=? 
   ORDER BY timestamp DESC`;
 
   connection.query(sql, [userID], (err, results) => {
@@ -360,9 +360,9 @@ function isGroupNameTaken(groupName, callback) {
 
 // callback(is: bool)
 function isInvited(invitationID, invitedID, callback) {
-  let sql = `SELECT * FROM invitations WHERE id=? AND invited=?`;
+  let sql = `SELECT * FROM invitations WHERE id=? AND invitee=?`;
 
-  connection.query(sql, [invitationID, invitedID], (err, results) => {
+  connection.query(sql, [invitationID, inviteeID], (err, results) => {
     if(err) throw err;
 
     callback(results.length == 1);
