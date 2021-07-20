@@ -181,8 +181,6 @@ module.exports.createUser = function(username, password) {
     @param  {Number} after          Only select chats after certain created timestamp
     @param  {Number} before         Only select chats before certain created timestamp
     @param  {Number} limit          Only select this number of chats
-    @param  {Function} callback     Called after a successful SQL query
-    @param  {Function} onError(msg) Called after a failed SQL query
     
     Lists newest chats.
     - Allows searching using the 'query' parameter
@@ -243,8 +241,6 @@ module.exports.discover = function(query, after, before, limit) {
     @param  {Number} after          Only select chats after certain created timestamp
     @param  {Number} before         Only select chats before certain created timestamp
     @param  {Number} limit          Only select this number of chats
-    @param  {Function} callback     Called after a successful SQL query
-    @param  {Function} onError(msg) Called after a failed SQL query
     
     Lists user's recently viewed chats.
     - Allows dynamic loading, using the 'after', 'before' and 'limit' parameters
@@ -307,8 +303,6 @@ module.exports.userChats = function(userID, after, before, limit) {
     @param  {Number} after          Only select chats after certain created timestamp
     @param  {Number} before         Only select chats before certain created timestamp
     @param  {Number} limit          Only select this number of chats
-    @param  {Function} callback     Called after a successful SQL query
-    @param  {Function} onError(msg) Called after a failed SQL query
     
     Lists invitations sent to user.
     - Allows dynamic loading, using the 'after', 'before' and 'limit' parameters
@@ -358,6 +352,66 @@ module.exports.userInvitations = function(userID, after, before, limit) {
                     err,
                     500,
                     "Failed to fetch invitations"
+                ));
+            }
+
+            resolve(results);
+        });
+    });
+}
+
+/**
+    @param  {Number} userID         UserID of target user
+    @param  {Number} after          Only select chats after certain created timestamp
+    @param  {Number} before         Only select chats before certain created timestamp
+    @param  {Number} limit          Only select this number of chats
+    
+    Lists requests sent to user's chats.
+    - Allows dynamic loading, using the 'after', 'before' and 'limit' parameters
+    - Sorted by latest
+    
+    Passed to callback: 
+    [
+        {
+            id: Number,
+            requester: String,
+            requesterID: Number,
+            chat: String,
+            chatID: Number,
+            timestamp: Number
+        }, ..
+    ]
+*/
+module.exports.userRequests = function(userID, after, before, limit) {
+    return new Promise((resolve, reject) => {
+        let sql = `SELECT requestsJoin.id, usersJoin.name AS requester, requestsJoin.user AS requesterID, chats.name AS chat, chats.id AS chatID, UNIX_TIMESTAMP(requestsJoin.timestamp) AS timestamp
+            FROM chats
+            RIGHT JOIN (
+                SELECT id, user, chat, requested AS timestamp, hidden
+                FROM requests
+                WHERE hidden=0
+            ) AS requestsJoin
+            ON requestsJoin.chat=chats.id
+            LEFT JOIN (
+                SELECT id, name
+                FROM users
+            ) AS usersJoin
+            ON usersJoin.id=requestsJoin.user
+            WHERE admin=?
+            HAVING
+                timestamp>? AND
+                timestamp<?
+            ORDER BY timestamp
+            DESC
+            LIMIT ?`;
+        
+        // Execute the SQL query
+        connection.query(sql, [userID, after, before, limit], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to fetch requests"
                 ));
             }
 
