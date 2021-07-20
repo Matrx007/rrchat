@@ -201,8 +201,7 @@ function makeSQLLIKESafe(string) {
 /**
     @param  {String} query          String to search chats by
     @param  {Number} after          Only select chats after certain created timestamp
-    @param  {Number} before         Only select chats before certain created timestamp
-    @param  {Number} limit          Only select this number of chats
+d    @param  {Number} limit          Only select this number of chats
     @param  {Function} callback     Called after a successful SQL query
     @param  {Function} onError(msg) Called after a failed SQL query
     
@@ -404,7 +403,7 @@ function getUserID(username, callback, onError = null) {
 */
 function checkPassword(userID, password, callback, onError = null) {
     let sql = `
-        SELECT id
+        SELECT id 
         FROM users
         WHERE id=? AND pass=AES_ENCRYPT(name, ?);
     `;
@@ -851,6 +850,35 @@ function belongsToChat(userID, chatID, callback, onError = null) {
     });
 }
 
+/**
+    @param  {Number} chatID         ID of the chat
+    @param  {Number} userID         ID of the user
+    @param  {Function} callback     Called after a successful SQL query
+    @param  {Function} onError(msg) Called after a failed SQL query
+    
+    Checks if given join request exists.
+    
+    Passed to callback: 
+    true or false
+*/
+function requestExists(chatID, userID, callback, onError = null) {
+    let sql = `SELECT COUNT(*) AS \`exists\` FROM chats WHERE id=?;
+        SELECT COUNT(*) FROM requests WHERE user=12 AND chat=25;`;
+
+    // Execute the SQL query
+    connection.query(sql, [chatID], (err, results) => {
+        if(err) {
+            console.log("#############################");
+            console.log("Failed query: ", this.sql);
+            console.log("Error message: ", err);
+            onError && onError("Query failed");
+            return;
+        }
+        
+        callback(results[0]["exists"]);
+    });
+}
+
 // #####################################
 // # UTILITY FUNCTIONS                 #
 // #####################################
@@ -1281,18 +1309,68 @@ app.get(prefix + '/api/chat/:id/members', (req, res) => {
     if(chatID == undefined) {
         res.status(400).send({message: "Expected URL: /api/chat/<CHAT ID>/members"});
         return;
-    }    
+    }
+    
+    function sendMembers() {
+        members(chatID, parameters["after"], parameters["before"], parameters["limit"], (data) => {
+            res.setHeader("Content-Type", "application/json");
+            res.status(200);
+            res.json(data);
+        });
+    }
     
     // All conditions passed, run queries
     isChatPublic(chatID, (isPublic) => {
         if(isPublic) {
-            members(chatID, parameters["after"], parameters["before"], parameters["limit"], (data) => {
-                res.setHeader("Content-Type", "application/json");
-                res.status(200);
-                res.json(data);
-            });
+            sendMembers();
         } else {
-            res.status(401).send({message: "This chat is private"});
+            // TODO: check for bugs
+            if(accessToken) {    
+                checkAccessToken(
+                    accessToken,
+                    
+                    // callback
+                    (userID) => {
+                        if(!userID) {
+                            res.status(403).send({message: "Invalid access token"});
+                            return;
+                        }
+                        
+                        belongsToChat(
+                            // data
+                            userID, 
+                            chatID,
+                            
+                            // callback
+                            (belongs) => {
+                                if(belongs) {
+                                    sendMembers();
+                                } else {             
+                                    res.status(403).send({message: "This chat is private"});
+                                    return;
+                                }
+                            },
+                            
+                            // on error
+                            (err) => {
+                                res.status(500).send({message: "Failed to check membership"});
+                                return;
+                            }
+                        );
+                        // Authorized, continue processing request
+                        processRequest(userID);
+                    },
+                    
+                    // on error
+                    (err) => {
+                        res.status(500).send({message: "Failed to check access token"});
+                        return;
+                    }
+                );
+            } else {
+                res.status(403).send({message: "This chat is private"});
+                return;
+            }
         }
     });
 });
@@ -1901,6 +1979,99 @@ app.post(prefix + '/api/create/chat', (req, res) => {
         }
     );
 });
+
+// TODO
+app.post(prefix + '/api/chat/:id/join', (req, res) => {
+    
+    let accessToken = req.body["token"];
+    
+    let chatID = stringToUInteger(req.params["id"]);
+    if(chatID == undefined) {
+        res.status(400).send({message: "Expected URL: /api/chat/<CHAT ID>/join"});
+        return;
+    }
+    
+    if(accessToken) {
+        checkAccessToken(
+            // data
+            accessToken,
+            
+            // callback
+            (userID) => {
+                chatExists(
+                    // data
+                    chatID,
+                    
+                    // callback
+                    (exist) => {
+                        if(!exist) {
+                            res.status(404).send({message: "Chat with this ID doesn't exist"});
+                            return;                            
+                        }
+                        
+                        belongsToChat(
+                            // data
+                            userID, 
+                            chatID,
+                            
+                            // callback
+                            (belongs) => {
+                                if(belongs) {
+                                    res.status(400).send({message: "You are already a member of this chat"});
+                                    return;
+                                } else {
+                                    
+                                    getChatInfo(
+                                        // data
+                                        chatID, 
+                                        userID,
+                                        
+                                        // callback
+                                        (data) => {
+                                            if(data["requestToJoin"]) {
+                                                
+                                            }
+                                        },
+                                        
+                                        // on error
+                                        (err) => {
+                                            res.status(500).send({message: "Failed to get chat's info"});
+                                            return;
+                                        }
+                                    );                                    
+                                }
+                            },
+                            
+                            // on error
+                            (err) => {
+                                res.status(500).send({message: "Failed to check membership"});
+                                return;
+                            }
+                        );
+                    },
+                    
+                    // on error
+                    (err) => {
+                        res.status(500).send({message: "Failed to check chat's existance"});
+                        return;
+                    }
+                );
+            },
+            
+            // on error
+            (err) => {
+                res.status(500).send({message: "Failed to check access token"});
+                return;
+            }
+        );
+    } else {
+        res.status(403).send({message: "Access token required for this action"});
+        return;
+    }
+    
+});
+
+
 
 // #####################################
 // # START LISTENERS                   #
