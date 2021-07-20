@@ -158,7 +158,7 @@ module.exports.userExists = function(userID) {
                 resolve(true);
             } else {
                 throw new ResponseError(
-                    "User doesn't exist",
+                    null,
                     404,
                     "User doesn't exist"
                 );
@@ -173,7 +173,7 @@ module.exports.userExists = function(userID) {
     Returns true if user exists and password matches. Otherwise false.
 */
 module.exports.checkPassword = function(userID, password) {
-    return new Promise((resolve) => {        
+    return new Promise((resolve, reject) => {        
         let sql = `
             SELECT id 
             FROM users
@@ -182,31 +182,22 @@ module.exports.checkPassword = function(userID, password) {
         
         connection.query(sql, [userID, password], (err, results) => {
             if(err) {
-                throw new ResponseError(
+                reject(new ResponseError(
                     err,
                     500,
                     "Failed to check password"
-                );
+                ));
             }
             
             if(results[0] && results[0]["id"] > 0) {
                 resolve(true);
             } else {
-                throw new ResponseError(
-                    "Password doesn't match or user doesn't exist",
+                reject(new ResponseError(
+                    null,
                     403,
                     "Incorrect password"
-                );
+                ));
             }
         });
     });
-}
-
-/**
-    @param {Number} userID   ID of the target user
-
-    Returns access token.
- */
-module.exports.authenticateUser = function(userID) {
-    
 }

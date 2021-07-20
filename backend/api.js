@@ -1,8 +1,8 @@
 
-const { ResponseError, handleResponseError } = require('./error_handling.js');
-const { typeCheck, stringToInteger, stringToUInteger, initializeParameters } = require('./tools.js');
+const { ResponseError, handleResponseError, error } = require('./error_handling.js');
+const { typeCheck, stringToInteger, stringToUInteger, initializeParameters, guard, respond } = require('./tools.js');
 const { getUserID, checkPassword, discover } = require('./database_interface.js');
-const { getAccessTokenOfUserID } = require('./redis_interface.js');
+const { logInUser, logOutUser } = require('./redis_interface.js');
 const { constants } = require('./constants.js');
 
 // #####################################
@@ -11,43 +11,70 @@ const { constants } = require('./constants.js');
 
 
 module.exports.bind = function(app) {
-    
+
+/*
+    Responds to:
+    POST /rrchat/api/login
+
+        REQUEST:
+        {
+            "username": <USERNAME>,
+            "password": <PASSWORD>
+        }
+        
+        RESPONSE:
+        {
+            "token": <ACCESS TOKEN>, 
+            "userID": <USER ID>
+        }
+*/
 app.post(constants.prefix + '/api/login', async (req, res) => {
     
     let { username, password } = req.body;
     
-    if(!(typeof username === 'string' || username instanceof String)) {
-        res.status(400).send({message: "'username' is not a string"});
-        return;
-    }
-    
-    if(username.length == 0) {
-        res.status(400).send({message: "'username' is empty"});
-    }
-    
-    if(!(typeof password === 'string' || password instanceof String)) {
-        res.status(400).send({message: "'password' is not a string"});
-        return;
-    }
-    
-    if(password.length == 0) {
-        res.status(400).send({message: "'password' is empty"});
-    }
-    
     try {
+        guard('StrLen', username, 'username');
+        guard('StrLen', password, 'password');
+        
         let userID = await getUserID(username);
+        if(!userID) error(404, 'Invalid user ID');
         
         let passwordMatches = await checkPassword(userID, password);
+        if(!passwordMatches) error(403, "Password doesn't match");
         
-        let token = await getAccessTokenOfUserID(userID);
+        let token = await logInUser(userID);
         
-        
+        respond(res, {
+            token: token,
+            userID: userID
+        });
     } catch(e) {
         handleResponseError(e, res);
-        return;
     }
+});
+
+/*
+    Responds to:
+    POST /rrchat/api/logout
+
+        REQUEST:
+        {
+            "token": <ACCESS TOKEN>
+        }
+*/
+app.post(constants.prefix + '/api/logout', async (req, res) => {
     
-    res.status(500).send({message: "Unknown error"});
+    let { token } = req.body;
+    
+    try {
+        guard('StrLen', token, 'token');
+        
+        let result = await logOutUser(token);
+        
+        respond(res, {success: result});
+    } catch(e) {
+        handleResponseError(e, res);
+    }
 });
 
 

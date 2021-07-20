@@ -13,6 +13,10 @@ typeCheckOptions: {
         StrNum: {
             typeOf: 'String',
             validate: (str) => !isNaN(str)
+        },
+        StrLen: {
+           typeOf: 'String',
+           validate: (str) => str.length > 0 
         }
     }
 },
@@ -21,6 +25,23 @@ typeCheck: function(template, data) {
     return this.typeCheckLib(template, data, this.typeCheckOptions);
 },
 
+
+/**
+    @param {template} template  Template to check given data against
+    @param {any} data           Data to be checked
+    
+    @returns { statusCode: Number, message: String }
+    
+    Checks given data against given template. 
+*/
+guard: function(template, data, property = null) {
+    if(!module.exports.typeCheck(template, data))
+        throw new module.exports.ResponseError(
+            null,
+            400,
+            "Bad request data" + (property && `: ${property}`)
+        );
+},
 
 // #####################################
 // # UTILITY FUNCTIONS                 #
@@ -189,6 +210,22 @@ initializeParameters: function(template, data, ifUnknownParameter, ifParameterIn
     }
     
     return results;
+},
+
+// #####################################
+// # COMMUNICATION                     #
+// #####################################
+
+/**
+    @param {ExpressJS res} res  Where response will be sent
+    @param {JSONObject} data    Data which will be sent
+    
+    Responds with status code 200 and sends a JSON response.
+*/
+respond: function(res, data) {
+    res.setHeader("Content-Type", "application/json");
+    res.status(200);
+    res.json(data);
 }
 
 }

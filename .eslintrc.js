@@ -136,7 +136,7 @@ module.exports = {
         "no-extra-label": "error",
         "no-extra-parens": "error",
         "no-floating-decimal": "error",
-        "no-implicit-coercion": "error",
+        "no-implicit-coercion": "off",
         "no-implicit-globals": "error",
         "no-implied-eval": "error",
         "no-inline-comments": "error",
@@ -256,7 +256,7 @@ module.exports = {
         "space-infix-ops": "off",
         "space-unary-ops": "error",
         "spaced-comment": [
-            "error",
+            "off",
             "always"
         ],
         "strict": "error",
