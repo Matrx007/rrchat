@@ -1,5 +1,8 @@
 // tools.js
 // #######
+
+const { ResponseError } = require('./error_handling.js');
+
 module.exports = {
 
 typeCheckLib: require("type-check").typeCheck,
@@ -36,10 +39,10 @@ typeCheck: function(template, data) {
 */
 guard: function(template, data, property = null) {
     if(!module.exports.typeCheck(template, data))
-        throw new module.exports.ResponseError(
+        throw new ResponseError(
             null,
             400,
-            "Bad request data" + (property && `: ${property}`)
+            "Bad or missing request data" + (property && `: ${property}`)
         );
 },
 

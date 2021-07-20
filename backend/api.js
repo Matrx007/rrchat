@@ -1,8 +1,8 @@
 
 const { ResponseError, handleResponseError, error } = require('./error_handling.js');
 const { typeCheck, stringToInteger, stringToUInteger, initializeParameters, guard, respond } = require('./tools.js');
-const { discover, getUserID, checkPassword, userIDExists, createUser } = require('./database_interface.js');
-const { logInUser, logOutUser } = require('./redis_interface.js');
+const { discover, getUserID, checkPassword, userIDExists, createUser, userChats } = require('./database_interface.js');
+const { logInUser, logOutUser, getUserIDOfAccessToken } = require('./redis_interface.js');
 const { constants } = require('./constants.js');
 
 // #####################################
@@ -167,6 +167,79 @@ app.get(constants.prefix + '/api/discover', async (req, res) => {
         res.setHeader("Content-Type", "application/json");
         res.status(200);
         res.json(data);
+    } catch(e) {
+        handleResponseError(e, res);
+    }
+});
+
+/*
+    Responds to:
+    GET /rrchat/api/user/:id/chats?after=<TIMESTAMP>?before=<BEFORE TIMESTAMP>?limit=<COUNT>
+
+        AUTHORIZATION:
+        if(userID == req.params.id) {
+            <SUCCESS>
+        } else {
+            <FAILURE>
+        }
+        
+        RESPONSE:
+        {
+            "chats": [
+                {
+                    "id": <CHAT ID>,
+                    "name": <CHAT NAME>,
+                    "admin": <CHAT ADMIN>,
+                    "public": <IS PUBLIC>,
+                    "requestToJoin": <IS REQUEST TO JOIN>,
+                    "created": <CREATED TIMESTAMP>
+                },
+                ..
+            ]
+        }
+*/
+app.get(constants.prefix + '/api/me/chats', async (req, res) => {
+    
+    try {
+        let { token } = req.body;
+        guard('StrLen', token, 'token');
+        
+        let userID = await getUserIDOfAccessToken(token);
+        if(!userID) error(403, 'Invalid access token');
+        
+        // Set missing paramaters to their defaults
+        let parameters = initializeParameters(
+            // Template:
+            {
+                before:     { type: 'StrNum', default: 4294967295,  min: 0, max: 4294967295},
+                after:      { type: 'StrNum', default: 0,           min: 0, max: 4294967295},
+                limit:      { type: 'StrNum', default: 30,          min: 1, max: 30}
+            },
+            // Input data:
+            req.query,
+            // On unknown parameter:
+            (msg) => { res.status(400).send({message: msg}); },
+            // On parameter of invalid type:
+            (msg) => { res.status(400).send({message: msg}); },
+            // On parameter breaking rules:
+            (msg) => { res.status(400).send({message: msg}); }
+        );
+        
+        if(!parameters) {
+            return;
+        }
+        
+        // All conditions passed, run queries
+        let data = await userChats(
+            userID, 
+            parameters["after"], 
+            parameters["before"], 
+            parameters["limit"]
+        );
+        
+        res.setHeader("Content-Type", "application/json");
+        res.status(200);
+        res.json({chats: data});
     } catch(e) {
         handleResponseError(e, res);
     }

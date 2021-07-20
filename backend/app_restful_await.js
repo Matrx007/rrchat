@@ -26,6 +26,18 @@ app.get(constants.prefix, function(req, res) {
 
 app.use(constants.prefix + '/public', express.static('./public'));
 
+function errorHandler (err, req, res, next) {
+    if (res.headersSent) {
+        return next(err);
+    }
+    
+    res.setHeader("Content-Type", "application/json");
+    res.status(500);
+    res.json({message: "Invalid request"});
+}
+
+app.use(errorHandler);
+
 // Socket.io
 
 let io = require('socket.io')(http, { path: '/rrchat/socket.io', origins: '*:*' });

@@ -37,71 +37,10 @@ module.exports.makeSQLLIKESafe = function(string) {
     return string.replace('_', "\\_").replace('%', "\\%");
 }
 
+
 // #####################################
-// # DATABASE FUNCTIONS                #
+// # DATA FUNCTIONS                    #
 // #####################################
-
-/**
-    @param  {String} query          String to search chats by
-    @param  {Number} after          Only select chats after certain created timestamp
-    @param  {Number} before         Only select chats before certain created timestamp
-    @param  {Number} limit          Only select this number of chats
-    @param  {Function} callback     Called after a successful SQL query
-    @param  {Function} onError(msg) Called after a failed SQL query
-    
-    Lists newest chats.
-    - Allows searching using the 'query' parameter
-    - Allows dynamic loading, using the 'after', 'before' and 'limit' parameters
-    - Sorted by chat's 'created' timestamp, newest first
-    
-    Passed to callback: 
-    [
-        {
-            id: Number,
-            name: String,
-            public: Number (1 or 0)
-            requestToJoin: Number (1 or 0),
-            created: Number
-        }, ..
-    ]
-*/
-module.exports.discover = function(query, after, before, limit) {
-    return new Promise((resolve, reject) => {
-        let sql = `
-            SELECT chats.id, chats.name, second.members, chats.public, chats.requestToJoin, UNIX_TIMESTAMP(chats.created) AS created
-            FROM chats 
-            LEFT JOIN (
-                SELECT chats.id, IFNULL(num.num,0) AS members 
-                FROM chats 
-                LEFT JOIN (
-                    SELECT chat, count(*) AS num 
-                    FROM members 
-                    GROUP BY chat
-                ) AS num 
-                ON num.chat=chats.id
-                WHERE chats.public=TRUE
-            ) AS second 
-            ON chats.id=second.id
-            WHERE chats.public=TRUE AND name LIKE ? AND UNIX_TIMESTAMP(chats.created) > ? AND UNIX_TIMESTAMP(chats.created) < ? ORDER BY chats.created DESC LIMIT ?;
-            `;
-
-        // Escape underscores and question marks
-        query = module.exports.makeSQLLIKESafe(query);
-
-        // Execute the SQL query
-        connection.query(sql, ["%"+query+"%", after, before, limit], (err, results) => {
-            if(err) {
-                reject(new ResponseError(
-                    err,
-                    500,
-                    "Failed to fetch 'discover' page"
-                ));
-            }
-
-            resolve(results);
-        });
-    });
-}
 
 /**
     @param {String} username    Name of target user
@@ -228,6 +167,137 @@ module.exports.createUser = function(username, password) {
                 ));
                 resolve(false);
             }
+        });
+    });
+}
+
+
+// #####################################
+// # DATA QUERIES                      #
+// #####################################
+
+/**
+    @param  {String} query          String to search chats by
+    @param  {Number} after          Only select chats after certain created timestamp
+    @param  {Number} before         Only select chats before certain created timestamp
+    @param  {Number} limit          Only select this number of chats
+    @param  {Function} callback     Called after a successful SQL query
+    @param  {Function} onError(msg) Called after a failed SQL query
+    
+    Lists newest chats.
+    - Allows searching using the 'query' parameter
+    - Allows dynamic loading, using the 'after', 'before' and 'limit' parameters
+    - Sorted by chat's 'created' timestamp, newest first
+    
+    Passed to callback: 
+    [
+        {
+            id: Number,
+            name: String,
+            public: Number (1 or 0)
+            requestToJoin: Number (1 or 0),
+            created: Number
+        }, ..
+    ]
+*/
+module.exports.discover = function(query, after, before, limit) {
+    return new Promise((resolve, reject) => {
+        let sql = `
+            SELECT chats.id, chats.name, second.members, chats.public, chats.requestToJoin, UNIX_TIMESTAMP(chats.created) AS created
+            FROM chats 
+            LEFT JOIN (
+                SELECT chats.id, IFNULL(num.num,0) AS members 
+                FROM chats 
+                LEFT JOIN (
+                    SELECT chat, count(*) AS num 
+                    FROM members 
+                    GROUP BY chat
+                ) AS num 
+                ON num.chat=chats.id
+                WHERE chats.public=TRUE
+            ) AS second 
+            ON chats.id=second.id
+            WHERE chats.public=TRUE AND name LIKE ? AND UNIX_TIMESTAMP(chats.created) > ? AND UNIX_TIMESTAMP(chats.created) < ? ORDER BY chats.created DESC LIMIT ?;
+            `;
+
+        // Escape underscores and question marks
+        query = module.exports.makeSQLLIKESafe(query);
+
+        // Execute the SQL query
+        connection.query(sql, ["%"+query+"%", after, before, limit], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to fetch 'discover' page"
+                ));
+            }
+
+            resolve(results);
+        });
+    });
+}
+
+/**
+    @param  {Number} userID         UserID of target user
+    @param  {Number} after          Only select chats after certain created timestamp
+    @param  {Number} before         Only select chats before certain created timestamp
+    @param  {Number} limit          Only select this number of chats
+    @param  {Function} callback     Called after a successful SQL query
+    @param  {Function} onError(msg) Called after a failed SQL query
+    
+    Lists user's recently viewed chats.
+    - Allows dynamic loading, using the 'after', 'before' and 'limit' parameters
+    - Sorted by latest message
+    
+    Passed to callback: 
+    [
+        {
+            chat: Number,
+            name: String,
+            message: String,
+            timestamp: Number
+        }, ..
+    ]
+*/
+module.exports.userChats = function(userID, after, before, limit) {
+    return new Promise((resolve, reject) => {
+        let sql = `
+            SELECT members.chat, info.name, UNIX_TIMESTAMP(IFNULL(latest.timestamp, info.created)) AS timestamp, latest.content
+            FROM members
+            LEFT JOIN (
+                SELECT messages.chat, MAX(messages.timestamp) AS timestamp, messages.content
+                FROM messages
+                GROUP BY messages.chat
+                ORDER BY messages.timestamp
+                DESC
+            ) AS latest
+            ON latest.chat=members.chat
+            LEFT JOIN (
+                SELECT id, name, created
+                FROM chats
+            ) AS info
+            ON info.id=members.chat
+            WHERE members.user = ? 
+            HAVING
+                timestamp > ? AND 
+                timestamp < ? 
+            ORDER BY timestamp
+            DESC
+            LIMIT ?
+        `;
+        
+        // Execute the SQL query
+        connection.query(sql, [userID, after, before, limit], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to fetch latest activity"
+                ));
+            }
+
+            resolve(results);
         });
     });
 }

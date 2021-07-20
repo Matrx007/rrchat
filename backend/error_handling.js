@@ -1,15 +1,10 @@
 // error_handling.js
 // #################
 
-const { typeCheck } = require('./tools.js');
 
-module.exports = {
 
-// ##############################
-// # ERROR HANDLING             #
-// ##############################
 
-ResponseError: class extends Error {
+module.exports.ResponseError = class extends Error {
     constructor(message, responseCode, responseMessage) {
         super(message);
         this.isProblematic = message && true;
@@ -24,15 +19,24 @@ ResponseError: class extends Error {
     get responseMessage() {
         return this._responseMessage;
     }
-},
+}
 
-error: function(status, msg) {
+
+
+
+const { typeCheck } = require('./tools.js');
+
+// ##############################
+// # ERROR HANDLING             #
+// ##############################
+
+module.exports.error = function(status, msg) {
     throw new module.exports.ResponseError(
         null,
         status,
         msg
     );
-},
+}
 
 /**
     @param {ResponseError} err  Thrown error which was catched by the catch(e) {..} statement
@@ -40,7 +44,7 @@ error: function(status, msg) {
     
     Meant to be called inside catch(e) {..} statement.
 */
-handleResponseError: function(err, res) {
+module.exports.handleResponseError = function(err, res) {
     if(!err) {
         console.error("null error");
         
@@ -58,4 +62,4 @@ handleResponseError: function(err, res) {
     }
 }
 
-}
+
