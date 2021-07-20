@@ -83,7 +83,7 @@ module.exports.destroyAccessToken = function(token, userID) {
                 );
             }
             
-            resolve(result);
+            resolve(!!result);
         });
     });
 }

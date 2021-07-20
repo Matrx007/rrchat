@@ -1,7 +1,7 @@
 
 const { ResponseError, handleResponseError, error } = require('./error_handling.js');
 const { typeCheck, stringToInteger, stringToUInteger, initializeParameters, guard, respond } = require('./tools.js');
-const { getUserID, checkPassword, discover } = require('./database_interface.js');
+const { discover, getUserID, checkPassword, userIDExists, createUser } = require('./database_interface.js');
 const { logInUser, logOutUser } = require('./redis_interface.js');
 const { constants } = require('./constants.js');
 
@@ -77,6 +77,46 @@ app.post(constants.prefix + '/api/logout', async (req, res) => {
     }
 });
 
+/*
+    Responds to:
+    POST /rrchat/api/register
+
+        REQUEST:
+        {
+            "username": <USERNAME>,
+            "password": <PASSWORD>
+        }
+        
+        RESPONSE:
+        {
+            "token": <ACCESS TOKEN>, 
+            "userID": <USER ID>
+        }
+*/
+app.post(constants.prefix + '/api/register', async (req, res) => {
+    
+    let { username, password } = req.body;
+    
+    try {
+        guard('StrLen', username, 'username');
+        guard('StrLen', password, 'password');
+        
+        let userNameTaken = await getUserID(username);
+        if(userNameTaken) error(409, 'Username already taken');
+        
+        let userID = await createUser(username, password);
+        if(!userID) error(500, 'Failed to register');
+        
+        let token = await logInUser(userID);
+        
+        respond(res, {
+            token: token,
+            userID: userID
+        });
+    } catch(e) {
+        handleResponseError(e, res);
+    }
+});
 
 /*
     Responds to:

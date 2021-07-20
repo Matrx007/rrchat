@@ -66,7 +66,7 @@ module.exports.makeSQLLIKESafe = function(string) {
     ]
 */
 module.exports.discover = function(query, after, before, limit) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         let sql = `
             SELECT chats.id, chats.name, second.members, chats.public, chats.requestToJoin, UNIX_TIMESTAMP(chats.created) AS created
             FROM chats 
@@ -91,11 +91,11 @@ module.exports.discover = function(query, after, before, limit) {
         // Execute the SQL query
         connection.query(sql, ["%"+query+"%", after, before, limit], (err, results) => {
             if(err) {
-                throw new ResponseError(
+                reject(new ResponseError(
                     err,
                     500,
                     "Failed to fetch 'discover' page"
-                );
+                ));
             }
 
             resolve(results);
@@ -104,13 +104,15 @@ module.exports.discover = function(query, after, before, limit) {
 }
 
 /**
-    @param {String} username
+    @param {String} username    Name of target user
+    
+    @returns {Boolean}          ID of found user
     
     Returns userID of given username.
     If user doesn't exist 0 will be returned.
 */
 module.exports.getUserID = function(username) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         let sql = `
             SELECT id
             FROM users
@@ -119,11 +121,11 @@ module.exports.getUserID = function(username) {
         
         connection.query(sql, [username], (err, results) => {
             if(err) {
-                throw new ResponseError(
+                reject(new ResponseError(
                     err,
                     500,
                     "Failed to identify account"
-                );
+                ));
             }
             
             resolve(results[0] ? results[0]["id"] : 0);
@@ -132,13 +134,14 @@ module.exports.getUserID = function(username) {
 }
 
 /**
-    @param {String} username
+    @param {Number} userID
     
-    Returns userID of given username.
-    If user doesn't exist 0 will be returned.
+    @returns {Boolean}  User exists
+    
+    Checks if user with give ID exists.
 */
-module.exports.userExists = function(userID) {
-    return new Promise((resolve) => {
+module.exports.userIDExists = function(userID) {
+    return new Promise((resolve, reject) => {
         let sql = `
             SELECT id
             FROM users
@@ -147,28 +150,24 @@ module.exports.userExists = function(userID) {
         
         connection.query(sql, [userID], (err, results) => {
             if(err) {
-                throw new ResponseError(
+                reject(new ResponseError(
                     err,
                     500,
                     "Failed to identify account"
-                );
+                ));
             }
             
-            if(results[0] && results[0]["id"] > 0) {
-                resolve(true);
-            } else {
-                throw new ResponseError(
-                    null,
-                    404,
-                    "User doesn't exist"
-                );
-            }
+            console.log("user exists results: ", results);
+            
+            resolve(results[0] && results[0]["id"] > 0);
         });
     });
 }
 
 /**
     @param {Number} userID
+    
+    @returns {Boolean}  User exists && password matches
     
     Returns true if user exists and password matches. Otherwise false.
 */
@@ -189,14 +188,45 @@ module.exports.checkPassword = function(userID, password) {
                 ));
             }
             
-            if(results[0] && results[0]["id"] > 0) {
+            resolve(results[0] && results[0]["id"] > 0);
+        });
+    });
+}
+
+/**
+    @param {String} username    Name of new user
+    @param {String} password    Password of new user
+    
+    @returns {Boolean}  Success
+    
+    Creates a new user with given username and password.
+    Returns true if user was created successfully, false otherwise.
+*/
+module.exports.createUser = function(username, password) {
+    return new Promise((resolve, reject) => {     
+        let sql = `
+            INSERT INTO users (name, pass) 
+            VALUES(?, AES_ENCRYPT(?, ?))
+        `;
+        
+        connection.query(sql, [username, username, password], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to check password"
+                ));
+            }
+            
+            if(results.insertId) {
                 resolve(true);
             } else {
                 reject(new ResponseError(
                     null,
-                    403,
-                    "Incorrect password"
+                    500,
+                    "Failed to register"
                 ));
+                resolve(false);
             }
         });
     });
