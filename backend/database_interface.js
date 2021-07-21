@@ -340,6 +340,61 @@ module.exports.chatAdmin = function(chatID) {
     });
 }
 
+/**
+    @param {Number} chatID  ID of target chat
+    @param {Number} userID  (optional) ID of asker user
+    
+    @returns {Number}       Returns 1 if true, 0 otherwise
+    
+    Returns chat's id, name, admin, isPublic, 
+    requestToJoin, created, member count and isMember.
+*/
+module.exports.chatInfo = function(chatID, userID = 0) {
+    return new Promise((resolve, reject) => {
+        let sql = `
+            SELECT 
+                chats.id, 
+                chats.name, 
+                (
+                    SELECT name
+                    FROM users
+                    WHERE users.id=chats.admin
+                ) AS admin, 
+                chats.admin AS adminID, 
+                chats.public, 
+                chats.requestToJoin, 
+                chats.created, 
+                (
+                    SELECT COUNT(id)
+                    FROM members
+                    WHERE members.chat=?
+                ) AS members,
+                (
+                    SELECT COUNT(id)
+                    FROM members
+                    WHERE members.chat=? AND
+                        members.user=?
+                ) OR chats.admin=? AS isMember
+            FROM chats
+            WHERE chats.id=?;
+        `;
+          
+        connection.query(sql, [chatID, chatID, userID, userID, chatID], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to get chat's info"
+                ));
+            }
+            
+            resolve(results ? results[0] : null);
+        });
+    });
+}
+
+
+
 // #####################################
 // # DATA QUERIES                      #
 // #####################################
