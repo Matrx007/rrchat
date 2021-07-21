@@ -67,7 +67,7 @@ module.exports.getUserID = function(username) {
                 ));
             }
             
-            resolve(results[0] ? results[0]["id"] : 0);
+            resolve(results && results[0] ? results[0]["id"] : 0);
         });
     });
 }
@@ -96,9 +96,9 @@ module.exports.userIDExists = function(userID) {
                 ));
             }
             
-            console.log("user exists results: ", results);
             
-            resolve(results[0] && results[0]["id"] > 0);
+            
+            resolve(results && results[0] && results[0]["id"] > 0);
         });
     });
 }
@@ -127,7 +127,7 @@ module.exports.checkPassword = function(userID, password) {
                 ));
             }
             
-            resolve(results[0] && results[0]["id"] > 0);
+            resolve(results && results[0] && results[0]["id"] > 0);
         });
     });
 }
@@ -171,6 +171,174 @@ module.exports.createUser = function(username, password) {
     });
 }
 
+/**
+    @param {Number} chatID  ID of target chat
+    
+    @returns {Number}       Returns 1 if chat is public, 0 otherwise
+    
+    Checks if given chat is public.
+*/
+module.exports.isChatPublic = function(chatID) {
+    return new Promise((resolve, reject) => {
+        let sql = `
+            SELECT id, public
+            FROM chats
+            WHERE id=?;
+        `;
+        
+        connection.query(sql, [chatID], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to check chat's visibility"
+                ));
+            }
+            
+            resolve(results && results[0] ? results[0]["public"] : 0);
+        });
+    });
+}
+
+/**
+    @param {Number} userID  ID of target user
+    @param {Number} chatID  ID of target chat
+    
+    @returns {Number}       Returns 1 if true, 0 otherwise
+    
+    Checks if given user is a member or an admin of given chat.
+*/
+module.exports.isMember = function(userID, chatID) {
+    return new Promise((resolve, reject) => {
+        let sql = `
+            SELECT (
+                SELECT COUNT(id)
+                FROM members
+                WHERE members.chat=? AND members.user=?
+            ) OR (
+                SELECT COUNT(id)
+                FROM chats
+                WHERE chats.id=? AND chats.admin=?
+            ) AS isMember
+        `;
+            
+        connection.query(sql, [chatID, userID, chatID, userID], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to check membership"
+                ));
+            }
+            
+            resolve(results && results[0] ? results[0]["isMember"] : 0);
+        });
+    });
+}
+
+/**
+    @param {Number} userID  ID of target user
+    @param {Number} chatID  ID of target chat
+    
+    @returns {Number}       Returns 1 if true, 0 otherwise
+    
+    Checks if given user is an admin of given chat.
+*/
+module.exports.isAdmin = function(userID, chatID) {
+    return new Promise((resolve, reject) => {
+        let sql = `
+            SELECT COUNT(id) AS isAdmin
+            FROM chats
+            WHERE chats.id=? AND chats.admin=?;
+        `;
+            
+        connection.query(sql, [chatID, userID], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to check membership"
+                ));
+            }
+            
+            resolve(results && results[0] ? results[0]["isAdmin"] : 0);
+        });
+    });
+}
+
+/**
+    @param {Number} chatID  ID of target chat
+    
+    @returns {Number}       Returns 1 if true, 0 otherwise
+    
+    Returns all members of given chat.
+*/
+module.exports.chatMembers = function(chatID, after = 0, before = 4294967295, limit = 30) {
+    return new Promise((resolve, reject) => {
+        let sql = `
+            SELECT user, usersJoin.name, UNIX_TIMESTAMP(members.joined) AS joined
+            FROM members
+            LEFT JOIN (
+                SELECT id, name
+                FROM users
+            ) AS usersJoin
+            ON usersJoin.id=members.user
+            WHERE chat=?
+            HAVING
+                joined>? AND
+                joined<?
+            ORDER BY members.joined
+            DESC
+            LIMIT ?;
+        `;
+        
+        connection.query(sql, [chatID, after, before, limit], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to get members"
+                ));
+            }
+            
+            resolve(results);
+        });
+    });
+}
+
+/**
+    @param {Number} chatID  ID of target chat
+    
+    @returns {Number}       Returns 1 if true, 0 otherwise
+    
+    Returns admin of given chat;
+*/
+module.exports.chatAdmin = function(chatID) {
+    return new Promise((resolve, reject) => {
+        let sql = `
+            SELECT admin AS id, usersJoin.name
+            FROM chats
+            LEFT JOIN (
+                SELECT id, name
+                FROM users
+            ) AS usersJoin
+            ON usersJoin.id=chats.admin
+            WHERE chats.id=?;
+        `;
+            
+        connection.query(sql, [chatID], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to find admin of chat"
+                ));
+            }
+            
+            resolve(results ? results[0] : null);
+        });
+    });
+}
 
 // #####################################
 // # DATA QUERIES                      #
