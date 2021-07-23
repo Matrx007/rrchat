@@ -73,11 +73,11 @@ module.exports.getUserID = function(username) {
 }
 
 /**
-    @param {Number} userID
+    @param {Number} userID  ID of target user
     
-    @returns {Boolean}  User exists
+    @returns {Number}       1 if user exists, 0 otherwise
     
-    Checks if user with give ID exists.
+    Checks if user with given ID exists.
 */
 module.exports.userIDExists = function(userID) {
     return new Promise((resolve, reject) => {
@@ -96,9 +96,7 @@ module.exports.userIDExists = function(userID) {
                 ));
             }
             
-            
-            
-            resolve(results && results[0] && results[0]["id"] > 0);
+            resolve(results.length);
         });
     });
 }
@@ -127,7 +125,7 @@ module.exports.checkPassword = function(userID, password) {
                 ));
             }
             
-            resolve(results && results[0] && results[0]["id"] > 0);
+            resolve(results.length);
         });
     });
 }
@@ -153,7 +151,7 @@ module.exports.createUser = function(username, password) {
                 reject(new ResponseError(
                     err,
                     500,
-                    "Failed to check password"
+                    "Failed to create user"
                 ));
             }
             
@@ -163,7 +161,7 @@ module.exports.createUser = function(username, password) {
                 reject(new ResponseError(
                     null,
                     500,
-                    "Failed to register"
+                    "Failed to create user"
                 ));
                 resolve(false);
             }
@@ -342,58 +340,260 @@ module.exports.chatAdmin = function(chatID) {
 
 /**
     @param {Number} chatID  ID of target chat
-    @param {Number} userID  (optional) ID of asker user
     
-    @returns {Number}       Returns 1 if true, 0 otherwise
+    @returns {Number}       1 if chat exists, 0 otherwise
     
-    Returns chat's id, name, admin, isPublic, 
-    requestToJoin, created, member count and isMember.
+    Checks if chat with given ID exists.
 */
-module.exports.chatInfo = function(chatID, userID = 0) {
+module.exports.chatIDExists = function(userID) {
     return new Promise((resolve, reject) => {
         let sql = `
-            SELECT 
-                chats.id, 
-                chats.name, 
-                (
-                    SELECT name
-                    FROM users
-                    WHERE users.id=chats.admin
-                ) AS admin, 
-                chats.admin AS adminID, 
-                chats.public, 
-                chats.requestToJoin, 
-                chats.created, 
-                (
-                    SELECT COUNT(id)
-                    FROM members
-                    WHERE members.chat=?
-                ) AS members,
-                (
-                    SELECT COUNT(id)
-                    FROM members
-                    WHERE members.chat=? AND
-                        members.user=?
-                ) OR chats.admin=? AS isMember
+            SELECT id
             FROM chats
-            WHERE chats.id=?;
+            WHERE id=?;
         `;
-          
-        connection.query(sql, [chatID, chatID, userID, userID, chatID], (err, results) => {
+        
+        connection.query(sql, [userID], (err, results) => {
             if(err) {
                 reject(new ResponseError(
                     err,
                     500,
-                    "Failed to get chat's info"
+                    "Failed to identify chat"
                 ));
             }
             
-            resolve(results ? results[0] : null);
+            resolve(results.length);
         });
     });
 }
 
+/**
+    @param {Number} chatID  ID of requested chat
+    @param {Number} userID  ID of requester
+    
+    @returns {Number}       ID of request if request exists, 0 otherwise
+    
+    Check if request sent to given user to given chat exists.
+*/
+module.exports.requestExists = function(chatID, userID) {
+    return new Promise((resolve, reject) => {
+        let sql = `
+            SELECT requests.id AS id
+            FROM requests
+            WHERE requests.user=? AND requests.chat=?;
+        `;
+        
+        connection.query(sql, [userID, chatID], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to validate request"
+                ));
+            }
+            
+            resolve(results && results[0] && results[0]["id"]);
+        });
+    });
+}
 
+/**
+    @param {Number} inviterID  ID of inviter
+    @param {Number} inviteeID  ID of invitee
+    @param {Number} chatID  ID of target chat
+    
+    @returns {Number}       ID of invitation if invitation 
+                            exists, 0 otherwise
+    
+    Check if invitation from given user to given user into 
+    given chat exists. 
+*/
+module.exports.invitationExists = function(inviterID, inviteeID, chatID) {
+    return new Promise((resolve, reject) => {
+        let sql = `
+            SELECT invitations.id AS id
+            FROM invitations
+            WHERE invitations.inviter=? AND
+                invitations.invitee=? AND
+                invitations.chat=?;
+        `;
+        
+        console.log("command: ", connection.format(sql, [inviterID, inviteeID, chatID]));
+        
+        connection.query(sql, [inviterID, inviteeID, chatID], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to validate request"
+                ));
+            }
+            
+            console.log("results: ", results);
+            console.log("result: ", results && results[0] && results[0]["id"]);
+            
+            resolve(results && results[0] && results[0]["id"]);
+        });
+    });
+}
+
+/**
+    @param {String} chatID    ID of target chat
+    @param {String} userID    ID of target user
+    
+    @returns {Boolean}  Success
+    
+    Creates a new request to give chat by given user.
+    Returns true if user was created successfully, false otherwise.
+*/
+module.exports.createRequest = function(chatID, userID) {
+    return new Promise((resolve, reject) => {     
+        let sql = `
+            INSERT INTO requests (chat, user) 
+            VALUES(?, ?)
+        `;
+        
+        connection.query(sql, [chatID, userID], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to create request"
+                ));
+            }
+            
+            if(results.insertId) {
+                resolve(results.insertId);
+            } else {
+                reject(new ResponseError(
+                    null,
+                    500,
+                    "Failed to create request"
+                ));
+                resolve(0);
+            }
+        });
+    });
+}
+
+/**
+    @param {String} invitationID    ID of target invitation
+    
+    @returns {Number}               Success
+    
+    Deletes a given invitation.
+    Returns 1 if an invitation was deleted, 0 otherwise.
+*/
+module.exports.deleteInvitation = function(invitationID) {
+    return new Promise((resolve, reject) => {     
+        let sql = `
+            DELETE
+            FROM invitations
+            WHERE invitations.id=?;
+        `;
+        
+        connection.query(sql, [invitationID], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to delete the invitation"
+                ));
+            }
+            
+            if(results.affectedRows) {
+                resolve(results.affectedRows);
+            } else {
+                reject(new ResponseError(
+                    null,
+                    500,
+                    "Failed to delete the invitation"
+                ));
+                resolve(0);
+            }
+        });
+    });
+}
+
+/**
+    @param {String} chatID    ID of target chat
+    @param {String} userID    ID of target user
+    
+    @returns {Boolean}  Success
+    
+    Joins given user into given chat.
+    Returns true if user was created successfully, false otherwise.
+*/
+module.exports.joinChat = function(chatID, userID) {
+    return new Promise((resolve, reject) => {     
+        let sql = `
+            INSERT INTO members (chat, user) 
+            VALUES(?, ?)
+        `;
+        
+        connection.query(sql, [chatID, userID], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to join user"
+                ));
+            }
+            
+            if(results.insertId) {
+                resolve(results.insertId);
+            } else {
+                reject(new ResponseError(
+                    null,
+                    500,
+                    "Failed to join user"
+                ));
+                resolve(0);
+            }
+        });
+    });
+}
+
+/**
+    @param {String} chatID    ID of target chat
+    @param {String} userID    ID of target user
+    
+    @returns {Boolean}  Success
+    
+    Removes given user from given chat.
+    Returns true if user was removed successfully, false otherwise.
+*/
+module.exports.leaveChat = function(chatID, userID) {
+    return new Promise((resolve, reject) => {     
+        let sql = `
+            DELETE 
+            FROM members
+            WHERE members.chat=? AND
+                members.user=?
+        `;
+        
+        connection.query(sql, [chatID, userID], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to remove user from chat"
+                ));
+            }
+            
+            if(results.affectedRows) {
+                resolve(results.affectedRows);
+            } else {
+                reject(new ResponseError(
+                    null,
+                    500,
+                    "Failed to remove user from chat"
+                ));
+                resolve(0);
+            }
+        });
+    });
+}
 
 // #####################################
 // # DATA QUERIES                      #
@@ -639,6 +839,60 @@ module.exports.userRequests = function(userID, after, before, limit) {
             }
 
             resolve(results);
+        });
+    });
+}
+
+
+/**
+    @param {Number} chatID  ID of target chat
+    @param {Number} userID  (optional) ID of asker user
+    
+    @returns {Number}       Returns 1 if true, 0 otherwise
+    
+    Returns chat's id, name, admin, isPublic, 
+    requestToJoin, created, member count and isMember.
+*/
+module.exports.chatInfo = function(chatID, userID = 0) {
+    return new Promise((resolve, reject) => {
+        let sql = `
+            SELECT 
+                chats.id, 
+                chats.name, 
+                (
+                    SELECT name
+                    FROM users
+                    WHERE users.id=chats.admin
+                ) AS admin, 
+                chats.admin AS adminID, 
+                chats.public, 
+                chats.requestToJoin, 
+                chats.created, 
+                (
+                    SELECT COUNT(id)
+                    FROM members
+                    WHERE members.chat=?
+                ) AS members,
+                (
+                    SELECT COUNT(id)
+                    FROM members
+                    WHERE members.chat=? AND
+                        members.user=?
+                ) OR chats.admin=? AS isMember
+            FROM chats
+            WHERE chats.id=?;
+        `;
+          
+        connection.query(sql, [chatID, chatID, userID, userID, chatID], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to get chat's info"
+                ));
+            }
+            
+            resolve(results ? results[0] : null);
         });
     });
 }

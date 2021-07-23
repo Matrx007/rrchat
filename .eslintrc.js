@@ -15,6 +15,7 @@ module.exports = {
     },
     "plugins": ["vue"],
     "rules": {
+        "no-cond-assign": "off",
         "accessor-pairs": "error",
         "array-bracket-newline": "error",
         "array-bracket-spacing": [
@@ -99,7 +100,7 @@ module.exports = {
             "error",
             "unix"
         ],
-        "lines-around-comment": "error",
+        "lines-around-comment": "off",
         "lines-between-class-members": "error",
         "max-classes-per-file": "error",
         "max-depth": "off",
@@ -207,7 +208,7 @@ module.exports = {
         "no-useless-return": "error",
         "no-var": "off",
         "no-void": "error",
-        "no-warning-comments": "error",
+        "no-warning-comments": "off",
         "no-whitespace-before-property": "error",
         "nonblock-statement-body-position": "off",
         "object-curly-newline": "error",
@@ -223,7 +224,7 @@ module.exports = {
         "prefer-const": "off",
         "prefer-destructuring": "error",
         "prefer-exponentiation-operator": "error",
-        "prefer-named-capture-group": "error",
+        "prefer-named-capture-group": "off",
         "prefer-numeric-literals": "error",
         "prefer-object-spread": "error",
         "prefer-promise-reject-errors": "error",

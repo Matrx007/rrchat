@@ -1,7 +1,7 @@
 
 const { ResponseError, handleResponseError, error } = require('./error_handling.js');
 const { typeCheck, stringToInteger, stringToUInteger, initializeParameters, guard, respond } = require('./tools.js');
-const { discover, getUserID, checkPassword, userIDExists, createUser, userChats, userInvitations, userRequests, isChatPublic, isMember, chatMembers, chatAdmin, chatInfo } = require('./database_interface.js');
+const { discover, getUserID, checkPassword, userIDExists, createUser, userChats, userInvitations, userRequests, isChatPublic, isMember, chatMembers, chatAdmin, chatInfo, chatIDExists, requestExists, invitationExists, joinChat, deleteInvitation, createRequest, leaveChat } = require('./database_interface.js');
 const { logInUser, logOutUser, getUserIDOfAccessToken } = require('./redis_interface.js');
 const { constants } = require('./constants.js');
 
@@ -67,7 +67,7 @@ app.post(constants.prefix + '/api/logout', async (req, res) => {
     let { token } = req.body;
     
     try {
-        guard('StrLen', token, 'token');
+        guard('StrTkn', token, 'token');
         
         let result = await logOutUser(token);
         
@@ -200,7 +200,7 @@ app.get(constants.prefix + '/api/me/chats', async (req, res) => {
     
     try {
         let { token } = req.body;
-        guard('StrLen', token, 'token');
+        guard('StrTkn', token, 'token');
         
         let userID = await getUserIDOfAccessToken(token);
         if(!userID) error(403, 'Invalid access token');
@@ -271,7 +271,7 @@ app.get(constants.prefix + '/api/me/invitations', async (req, res) => {
     
     try {
         let { token } = req.body;
-        guard('StrLen', token, 'token');
+        guard('StrTkn', token, 'token');
         
         let userID = await getUserIDOfAccessToken(token);
         if(!userID) error(403, 'Invalid access token');
@@ -342,7 +342,7 @@ app.get(constants.prefix + '/api/me/requests', async (req, res) => {
     
     try {
         let { token } = req.body;
-        guard('StrLen', token, 'token');
+        guard('StrTkn', token, 'token');
         
         let userID = await getUserIDOfAccessToken(token);
         if(!userID) error(403, 'Invalid access token');
@@ -419,6 +419,8 @@ app.get(constants.prefix + '/api/chat/:id/members', async (req, res) => {
         
         let chatID = stringToUInteger(req.params["id"]);
         if(!chatID) error(400, 'Expected URL: api/chat/<CHAT ID>/members');
+
+        if(!await chatIDExists(chatID)) error(404, "This chat doesn't exist");
         
         // Set missing paramaters to their defaults
         let parameters = initializeParameters(
@@ -446,7 +448,7 @@ app.get(constants.prefix + '/api/chat/:id/members', async (req, res) => {
         
         if(!isPublic) {
             let { token } = req.body;
-            guard('StrLen', token, 'token');
+            guard('StrTkn', token, 'token');
             
             let userID = await getUserIDOfAccessToken(token);
             if(!userID) error(403, 'Invalid access token');
@@ -504,13 +506,15 @@ app.get(constants.prefix + '/api/chat/:id', async (req, res) => {
         
         let chatID = stringToUInteger(req.params["id"]);
         if(!chatID) error(400, 'Expected URL: api/chat/<CHAT ID>');
+        
+        if(!await chatIDExists(chatID)) error(404, "This chat doesn't exist");
     
         let isPublic = await isChatPublic(chatID);
         
         let { token } = req.body;
         let userID = 0;
         if(token) {
-            guard('StrLen', token, 'token');
+            guard('StrTkn', token, 'token');
             
             userID = await getUserIDOfAccessToken(token);
             if(!userID) error(403, 'Invalid access token');
@@ -530,5 +534,156 @@ app.get(constants.prefix + '/api/chat/:id', async (req, res) => {
         handleResponseError(e, res);
     }
 });
+
+/*
+    POST /rrchat/api/chat/:id/join
+        AUTHORIZATION:
+            if(chatExists(..)) {
+                if(belongsInChat(..)) {
+                    <FAILURE: You are already an member of this chat>
+                } else {
+                    getChatData(chatID) {
+                        if(isRequestToJoin) {
+                            if(requestExists(userID, chatID)) {
+                                <FAILURE: You have already submitted a request>
+                            } else {
+                                <SUCCESS: Join request sent>
+                            }
+                        } else {
+                            if(isPublic) {
+                                <SUCCESS: Chat joined>
+                            } else {
+                                <FAILURE: This chat is private>
+                            }
+                        }
+                    }
+                }
+            } else {
+                <FAILURE: Chat with this ID doesn't exist>
+            }
+        
+        RESPONSE:
+        {
+            "joined": <SUCCESS (TRUE if join was successful)>,
+            "requestID": <REQUEST ID (if request was sent, 0 otherwise)>
+        }
+*/
+app.get(constants.prefix + '/api/chat/:id/join', async (req, res) => {
+    
+    try {
+        // Will be sent back to client:
+        let sentRequestID = 0;
+        let chatJoined = false;
+        
+        
+        
+        let chatID = stringToUInteger(req.params["id"]);
+        if(!chatID) error(400, 'Expected URL: api/chat/<CHAT ID>/join');
+        
+        let { token } = req.body;
+        guard('StrTkn', token, 'token');
+        
+        let userID = await getUserIDOfAccessToken(token);
+        if(!userID) error(403, 'Invalid access token');
+        
+        let info = await chatInfo(chatID, userID);
+        if(!info) error(404, "This chat doesn't exist");
+        
+        let invitationID = 0;
+        
+        // If already a member
+        if(info["isMember"]) error(409, 'You are already a member of this chat');
+        
+        // If user has invitation from admin
+        else if(invitationID = await invitationExists(info["adminID"], userID, chatID)) {
+            await joinChat(chatID, userID);
+            await deleteInvitation(invitationID);
+            chatJoined = true;
+        } 
+        
+        // If chat is requestToJoin
+        else if(info["requestToJoin"]) {            
+            let invitationID = 0;
+            
+            // If user has sent a request
+            if(await requestExists(chatID, userID)) {
+                error(409, 'Request already sent');
+            } else 
+            
+            // If user hasn't sent a request
+            {
+                sentRequestID = await createRequest(chatID, userID);
+            }
+        } else
+        
+        // If chat is public
+        if(info["public"]) {
+            await joinChat(chatID, userID);
+            chatJoined = true;
+        } else 
+        
+        // If chat is not public
+        {
+            error(403, 'This chat is private');
+        }
+        
+        res.setHeader("Content-Type", "application/json");
+        res.status(200);
+        res.json({
+            success: chatJoined,
+            requestID: sentRequestID
+        });
+    } catch(e) {
+        handleResponseError(e, res);
+    }
+});
+
+/*
+    POST /rrchat/api/chat/:id/leave
+        AUTHORIZATION:            
+            if(belongsInChat(..)) {
+                <SUCCESS>
+            } else {
+                <FAILURE: You are not an member of this chat>
+            }
+        
+        RESPONSE:
+        {
+            "successful": <WAS LEAVING SUCCESSFUL>
+        }
+*/
+app.post(constants.prefix + '/api/chat/:id/leave', async (req, res) => {
+    
+    try {
+        
+        let chatID = stringToUInteger(req.params["id"]);
+        if(!chatID) error(400, 'Expected URL: api/chat/<CHAT ID>/leave');
+        
+        let { token } = req.body;
+        guard('StrTkn', token, 'token');
+        
+        let userID = await getUserIDOfAccessToken(token);
+        if(!userID) error(403, 'Invalid access token');
+        
+        let exists = await chatIDExists(chatID);
+        if(!exists) error(404, "This chat doesn't exist");
+        
+        let admin = await chatAdmin(chatID);
+        if(admin == userID) error(400, 'Please transfer ownership before leaving');
+        
+        let member = await isMember(userID, chatID);
+        if(!member) error(400, 'You are not a member of this chat');
+        
+        let success = await leaveChat(chatID, userID);
+        
+        res.setHeader("Content-Type", "application/json");
+        res.status(200);
+        res.json({ success: success });
+    } catch(e) {
+        handleResponseError(e, res);
+    }
+});
+
+
 
 }

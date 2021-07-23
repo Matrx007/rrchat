@@ -20,6 +20,10 @@ typeCheckOptions: {
         StrLen: {
            typeOf: 'String',
            validate: (str) => str.length > 0 
+        },
+        StrTkn: {
+           typeOf: 'String',
+           validate: (str) => str.length == 64 && /^([a-z0-9]{64})$/.test(str)
         }
     }
 },
