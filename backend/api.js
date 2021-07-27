@@ -1,8 +1,38 @@
 
-const { ResponseError, handleResponseError, error } = require('./error_handling.js');
-const { typeCheck, stringToInteger, stringToUInteger, initializeParameters, guard, respond } = require('./tools.js');
-const { discover, getUserID, checkPassword, userIDExists, createUser, userChats, userInvitations, userRequests, isChatPublic, isMember, chatMembers, chatAdmin, chatInfo, chatIDExists, requestExists, invitationExists, joinChat, deleteInvitation, createRequest, leaveChat } = require('./database_interface.js');
-const { logInUser, logOutUser, getUserIDOfAccessToken } = require('./redis_interface.js');
+const { ResponseError, 
+        handleResponseError, 
+        error } = require('./error_handling.js');
+const { typeCheck, 
+        stringToInteger, 
+        stringToUInteger, 
+        initializeParameters, 
+        guard, 
+        respond } = require('./tools.js');
+const { discover,
+        getUserID,
+        checkPassword,
+        userIDExists,
+        createUser,
+        userChats,
+        userInvitations,
+        userRequests,
+        isChatPublic,
+        isMember,
+        chatMembers,
+        chatAdmin,
+        chatInfo,
+        chatIDExists,
+        requestExists,
+        invitationExists,
+        joinChat,
+        deleteInvitation,
+        createRequest,
+        leaveChat,
+        getChatID,
+        createChat } = require('./database_interface.js');
+const { logInUser, 
+        logOutUser, 
+        getUserIDOfAccessToken } = require('./redis_interface.js');
 const { constants } = require('./constants.js');
 
 // #####################################
@@ -683,7 +713,60 @@ app.post(constants.prefix + '/api/chat/:id/leave', async (req, res) => {
         handleResponseError(e, res);
     }
 });
+/*
+    Responds to:
+    POST /rrchat/api/create/chat
+        AUTHORIZATION:
+            required
 
+        REQUEST:
+        {
+            "name": <CHAT NAME>,
+            "public": <IS CHAT PUBLIC>,
+            "requestToJoin": <IS CHAT REQUEST-TO-JOIN>
+        }
+        
+        RESPONSE:
+        {
+            "chatID": <CHAT ID>
+        }
+*/
+app.post(constants.prefix + '/api/create/chat', async (req, res) => {
+    
+    try {
+        let { token, name, visibility, requestToJoin } = req.body;
+        
+        // Authentication
+        
+        guard('StrTkn', token, 'token');
+        
+        let userID = await getUserIDOfAccessToken(token);
+        if(!userID) error(403, 'Invalid access token');
+        
+        // Guards
+        
+        guard('StrLen', name, 'name');
+        guard('Boolean', visibility, 'visibility');
+        guard('Boolean', requestToJoin, 'requestToJoin');
+        
+        if(!/^[a-zA-Z0-9 _\-]+$/.test(name))
+            error(400, "Chat's name can only contain letters, numbers, spaces, hyphens and underscores");
+        
+        
+        let exists = await getChatID(name);
+        if(exists) error(400, 'Chat with this name already exists');
+        
+        // Data insertion
+        
+        let success = await createChat(name, visibility, requestToJoin, userID);
+        
+        res.setHeader("Content-Type", "application/json");
+        res.status(200);
+        res.json({ success: success });
+    } catch(e) {
+        handleResponseError(e, res);
+    }
+});
 
 
 }

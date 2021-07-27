@@ -63,9 +63,44 @@ module.exports.getUserID = function(username) {
                 reject(new ResponseError(
                     err,
                     500,
-                    "Failed to identify account"
+                    "Failed to identify user"
                 ));
             }
+            
+            resolve(results && results[0] ? results[0]["id"] : 0);
+        });
+    });
+}
+
+/**
+    @param {String} chat name   Name of target chat
+    
+    @returns {Boolean}          ID of found chat
+    
+    Returns chatID of given chat by name.
+    If chat doesn't exist 0 will be returned.
+*/
+module.exports.getChatID = function(name) {
+    return new Promise((resolve, reject) => {
+        let sql = `
+            SELECT id
+            FROM chats
+            WHERE name=?;
+        `;
+        
+        console.log(connection.format(sql, [name]));
+        
+        connection.query(sql, [name], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to identify chat"
+                ));
+            }
+            
+            console.log(results, results && results[0], results && results[0] && results[0]["id"]);
+            console.log(results && results[0] ? results[0]["id"] : 0);
             
             resolve(results && results[0] ? results[0]["id"] : 0);
         });
@@ -345,7 +380,7 @@ module.exports.chatAdmin = function(chatID) {
     
     Checks if chat with given ID exists.
 */
-module.exports.chatIDExists = function(userID) {
+module.exports.chatIDExists = function(chatID) {
     return new Promise((resolve, reject) => {
         let sql = `
             SELECT id
@@ -353,7 +388,7 @@ module.exports.chatIDExists = function(userID) {
             WHERE id=?;
         `;
         
-        connection.query(sql, [userID], (err, results) => {
+        connection.query(sql, [chatID], (err, results) => {
             if(err) {
                 reject(new ResponseError(
                     err,
@@ -590,6 +625,47 @@ module.exports.leaveChat = function(chatID, userID) {
                     "Failed to remove user from chat"
                 ));
                 resolve(0);
+            }
+        });
+    });
+}
+
+/**
+    @param {String} name            Name of the chat
+    @param {Boolean} isPublic       Visibility of the chat
+    @param {Boolean} requestToJoin  Accessability of the chat
+    @param {Number} admin           Admin of the chat
+    
+    @returns {Boolean}  Success
+    
+    Creates a new chat wth given parameters.
+    Returns true if chat was created successfully, false otherwise.
+*/
+module.exports.createChat = function(name, isPublic, isRequestToJoin, admin) {
+    return new Promise((resolve, reject) => {     
+        let sql = `
+            INSERT INTO chats (name, public, requestToJoin, admin) 
+            VALUES(?, ?, ?, ?)
+        `;
+        
+        connection.query(sql, [name, isPublic, isRequestToJoin, admin], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to create chat"
+                ));
+            }
+            
+            if(results.insertId) {
+                resolve(true);
+            } else {
+                reject(new ResponseError(
+                    null,
+                    500,
+                    "Failed to create chat"
+                ));
+                resolve(false);
             }
         });
     });
