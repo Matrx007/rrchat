@@ -65,6 +65,7 @@ module.exports.getUserID = function(username) {
                     500,
                     "Failed to identify user"
                 ));
+                return;
             }
             
             resolve(results && results[0] ? results[0]["id"] : 0);
@@ -97,6 +98,7 @@ module.exports.getChatID = function(name) {
                     500,
                     "Failed to identify chat"
                 ));
+                return;
             }
             
             console.log(results, results && results[0], results && results[0] && results[0]["id"]);
@@ -129,6 +131,7 @@ module.exports.userIDExists = function(userID) {
                     500,
                     "Failed to identify account"
                 ));
+                return;
             }
             
             resolve(results.length);
@@ -158,6 +161,7 @@ module.exports.checkPassword = function(userID, password) {
                     500,
                     "Failed to check password"
                 ));
+                return;
             }
             
             resolve(results.length);
@@ -188,6 +192,7 @@ module.exports.createUser = function(username, password) {
                     500,
                     "Failed to create user"
                 ));
+                return;
             }
             
             if(results.insertId) {
@@ -226,6 +231,7 @@ module.exports.isChatPublic = function(chatID) {
                     500,
                     "Failed to check chat's visibility"
                 ));
+                return;
             }
             
             resolve(results && results[0] ? results[0]["public"] : 0);
@@ -262,6 +268,7 @@ module.exports.isMember = function(userID, chatID) {
                     500,
                     "Failed to check membership"
                 ));
+                return;
             }
             
             resolve(results && results[0] ? results[0]["isMember"] : 0);
@@ -292,6 +299,7 @@ module.exports.isAdmin = function(userID, chatID) {
                     500,
                     "Failed to check membership"
                 ));
+                return;
             }
             
             resolve(results && results[0] ? results[0]["isAdmin"] : 0);
@@ -332,6 +340,7 @@ module.exports.chatMembers = function(chatID, after = 0, before = 4294967295, li
                     500,
                     "Failed to get members"
                 ));
+                return;
             }
             
             resolve(results);
@@ -366,6 +375,7 @@ module.exports.chatAdmin = function(chatID) {
                     500,
                     "Failed to find admin of chat"
                 ));
+                return;
             }
             
             resolve(results ? results[0] : null);
@@ -395,6 +405,7 @@ module.exports.chatIDExists = function(chatID) {
                     500,
                     "Failed to identify chat"
                 ));
+                return;
             }
             
             resolve(results.length);
@@ -425,6 +436,7 @@ module.exports.requestExists = function(chatID, userID) {
                     500,
                     "Failed to validate request"
                 ));
+                return;
             }
             
             resolve(results && results[0] && results[0]["id"]);
@@ -462,10 +474,8 @@ module.exports.invitationExists = function(inviterID, inviteeID, chatID) {
                     500,
                     "Failed to validate request"
                 ));
+                return;
             }
-            
-            console.log("results: ", results);
-            console.log("result: ", results && results[0] && results[0]["id"]);
             
             resolve(results && results[0] && results[0]["id"]);
         });
@@ -478,7 +488,7 @@ module.exports.invitationExists = function(inviterID, inviteeID, chatID) {
     
     @returns {Boolean}  Success
     
-    Creates a new request to give chat by given user.
+    Creates a new request to given chat by given user.
     Returns true if user was created successfully, false otherwise.
 */
 module.exports.createRequest = function(chatID, userID) {
@@ -495,6 +505,7 @@ module.exports.createRequest = function(chatID, userID) {
                     500,
                     "Failed to create request"
                 ));
+                return;
             }
             
             if(results.insertId) {
@@ -534,6 +545,7 @@ module.exports.deleteInvitation = function(invitationID) {
                     500,
                     "Failed to delete the invitation"
                 ));
+                return;
             }
             
             if(results.affectedRows) {
@@ -573,6 +585,7 @@ module.exports.joinChat = function(chatID, userID) {
                     500,
                     "Failed to join user"
                 ));
+                return;
             }
             
             if(results.insertId) {
@@ -614,6 +627,7 @@ module.exports.leaveChat = function(chatID, userID) {
                     500,
                     "Failed to remove user from chat"
                 ));
+                return;
             }
             
             if(results.affectedRows) {
@@ -655,6 +669,7 @@ module.exports.createChat = function(name, isPublic, isRequestToJoin, admin) {
                     500,
                     "Failed to create chat"
                 ));
+                return;
             }
             
             if(results.insertId) {
@@ -666,6 +681,47 @@ module.exports.createChat = function(name, isPublic, isRequestToJoin, admin) {
                     "Failed to create chat"
                 ));
                 resolve(false);
+            }
+        });
+    });
+}
+
+/**
+    @param {Number} inviter   ID of inviter
+    @param {Number} invitee   ID of invitee
+    @param {Number} chatID    ID of target chat
+    
+    @returns {Boolean}  Success
+    
+    Creates a new invitation.
+    Returns true if invitation was sent successfully, false otherwise.
+*/
+module.exports.createInvitation = function(inviter, invitee, chatID) {
+    return new Promise((resolve, reject) => {     
+        let sql = `
+            INSERT INTO invitations (inviter, invitee, chat) 
+            VALUES(?, ?, ?)
+        `;
+        
+        connection.query(sql, [inviter, invitee, chatID], (err, results) => {
+            if(err) {
+                reject(new ResponseError(
+                    err,
+                    500,
+                    "Failed to create invitation"
+                ));
+                return;
+            }
+            
+            if(results.insertId) {
+                resolve(results.insertId);
+            } else {
+                reject(new ResponseError(
+                    null,
+                    500,
+                    "Failed to create invitation"
+                ));
+                resolve(0);
             }
         });
     });
@@ -728,6 +784,7 @@ module.exports.discover = function(query, after, before, limit) {
                     500,
                     "Failed to fetch 'discover' page"
                 ));
+                return;
             }
 
             resolve(results);
@@ -790,6 +847,7 @@ module.exports.userChats = function(userID, after, before, limit) {
                     500,
                     "Failed to fetch latest activity"
                 ));
+                return;
             }
 
             resolve(results);
@@ -852,6 +910,7 @@ module.exports.userInvitations = function(userID, after, before, limit) {
                     500,
                     "Failed to fetch invitations"
                 ));
+                return;
             }
 
             resolve(results);
@@ -912,6 +971,7 @@ module.exports.userRequests = function(userID, after, before, limit) {
                     500,
                     "Failed to fetch requests"
                 ));
+                return;
             }
 
             resolve(results);
@@ -966,6 +1026,7 @@ module.exports.chatInfo = function(chatID, userID = 0) {
                     500,
                     "Failed to get chat's info"
                 ));
+                return;
             }
             
             resolve(results ? results[0] : null);

@@ -29,7 +29,8 @@ const { discover,
         createRequest,
         leaveChat,
         getChatID,
-        createChat } = require('./database_interface.js');
+        createChat,
+        createInvitation } = require('./database_interface.js');
 const { logInUser, 
         logOutUser, 
         getUserIDOfAccessToken } = require('./redis_interface.js');
@@ -763,6 +764,71 @@ app.post(constants.prefix + '/api/create/chat', async (req, res) => {
         res.setHeader("Content-Type", "application/json");
         res.status(200);
         res.json({ success: success });
+    } catch(e) {
+        handleResponseError(e, res);
+    }
+});
+
+/*
+    Responds to:
+    POST /rrchat/api/chat/:id/invite
+        AUTHORIZATION:
+            required
+            
+            if(belongsInChat(..)) {
+                <SUCCESS>
+            } else {
+                <FAILURE: You are not an member of this chat>
+            }
+        
+        REQUEST: 
+        {
+            "invitee": <USER ID>
+        }
+        
+        RESPONSE:
+        {
+            "successful": <WAS INVITE SUCCESSFUL>,
+            "invitationID": <INVITATION ID>
+        }
+*/
+app.get(constants.prefix + '/api/chat/:id/invite', async (req, res) => {
+    
+    try {
+        // Will be sent back to client:
+        let invitationSent = false;
+        let invitationID = 0;
+        
+        // Guards
+        let chatID = stringToUInteger(req.params["id"]);
+        if(!chatID) error(400, 'Expected URL: api/chat/<CHAT ID>/invite');
+        
+        let { token, invitee } = req.body;
+        guard('StrTkn', token, 'token');
+        guard('Number', invitee, 'invitee');
+        if(!invitee) error(400, 'Bad or missing invitee ID');
+        
+        let userID = await getUserIDOfAccessToken(token);
+        if(!userID) error(403, 'Invalid access token');
+        
+        let info = await chatInfo(chatID, userID);
+        if(!info) error(404, "This chat doesn't exist");
+        
+        if(!info["isMember"]) error(403, 'You are not a member of this chat');
+        
+        if(await invitationExists(userID, invitee, chatID))
+            error(409, 'Invitation already sent');
+        
+        // Data insertion
+        invitationID = await createInvitation(userID, invitee, chatID);
+        invitationSent = !!invitationID;
+        
+        res.setHeader("Content-Type", "application/json");
+        res.status(200);
+        res.json({
+            success: invitationSent,
+            invitationID: invitationID
+        });
     } catch(e) {
         handleResponseError(e, res);
     }
